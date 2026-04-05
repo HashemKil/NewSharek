@@ -7,9 +7,10 @@ import { supabase } from "../../lib/supabase";
 
 export default function RegisterPage() {
   const router = useRouter();
-
-  const [name, setName] = useState("");
+  const [firstName, setFirstName] = useState("");
+  const [lastName, setLastName] = useState("");
   const [email, setEmail] = useState("");
+  const [studentId, setStudentId] = useState("");
   const [major, setMajor] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -20,7 +21,7 @@ export default function RegisterPage() {
 
   const validatePSUTEmail = (value: string) => {
     const basicEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    return basicEmail.test(value) && value.toLowerCase().endsWith("@std.psut.edu.jo");
+    return basicEmail.test(value) && value.toLowerCase().endsWith(".psut.edu.jo");
   };
 
   const handleRegister = async (e: React.FormEvent<HTMLFormElement>) => {
@@ -28,11 +29,22 @@ export default function RegisterPage() {
     setError("");
     setSuccess("");
 
-    const cleanName = name.trim();
+    const cleanFirstName = firstName.trim();
+    const cleanLastName = lastName.trim();
+    const cleanName = `${cleanFirstName} ${cleanLastName}`.trim();
     const cleanEmail = email.trim().toLowerCase();
+    const cleanStudentId = studentId.trim();
     const cleanMajor = major.trim();
 
-    if (!cleanName || !cleanEmail || !cleanMajor || !password || !confirmPassword) {
+    if (
+      !cleanFirstName ||
+      !cleanLastName ||
+      !cleanEmail ||
+      !cleanMajor ||
+      !cleanStudentId ||
+      !password ||
+      !confirmPassword
+    ) {
       setError("Please fill in all fields.");
       return;
     }
@@ -61,11 +73,7 @@ export default function RegisterPage() {
       });
 
       if (signUpError) {
-        if (signUpError.message.toLowerCase().includes("rate limit")) {
-          setError("Too many signup attempts. Please wait a little and try again.");
-        } else {
-          setError(signUpError.message);
-        }
+        setError(signUpError.message);
         return;
       }
 
@@ -78,22 +86,32 @@ export default function RegisterPage() {
 
       const { error: profileError } = await supabase.from("profiles").insert({
         id: user.id,
-        name: cleanName,
+        email: cleanEmail,
+        student_id: cleanStudentId,
+        full_name: cleanName,
         major: cleanMajor,
-        year: "",
+        academic_year: "",
         bio: "",
+        avatar_url: "",
         skills: [],
+        interests: [],
+        is_admin: false,
+        is_club_admin: false,
+        portal_verified: false,
       });
 
       if (profileError) {
+        console.error("Profile insert error:", profileError);
         setError(profileError.message);
         return;
       }
 
-      setSuccess("Account created successfully. Please sign in.");
+      setSuccess("Account created successfully. Please check your email, then sign in.");
 
-      setName("");
+      setFirstName("");
+      setLastName("");
       setEmail("");
+      setStudentId("");
       setMajor("");
       setPassword("");
       setConfirmPassword("");
@@ -143,14 +161,25 @@ export default function RegisterPage() {
           )}
 
           <form className="space-y-4" onSubmit={handleRegister}>
-            <input
-              type="text"
-              placeholder="Full Name"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              required
-              className={inputClass}
-            />
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <input
+                type="text"
+                placeholder="First Name"
+                value={firstName}
+                onChange={(e) => setFirstName(e.target.value)}
+                required
+                className={inputClass}
+              />
+
+              <input
+                type="text"
+                placeholder="Last Name"
+                value={lastName}
+                onChange={(e) => setLastName(e.target.value)}
+                required
+                className={inputClass}
+              />
+            </div>
 
             <input
               type="email"
@@ -167,12 +196,37 @@ export default function RegisterPage() {
 
             <input
               type="text"
-              placeholder="Major (e.g. Software Engineering)"
-              value={major}
-              onChange={(e) => setMajor(e.target.value)}
+              placeholder="Student ID (e.g. 20210001)"
+              value={studentId}
+              onChange={(e) => setStudentId(e.target.value)}
               required
               className={inputClass}
             />
+
+            <label className="block">
+              <select
+                value={major}
+                onChange={(e) => setMajor(e.target.value)}
+                required
+                className={inputClass}
+              >
+                <option value="">Select your major</option>
+                <option>Computer Science</option>
+                <option>Cyber Security</option>
+                <option>Software Engineering</option>
+                <option>Computer Graphics and Animation</option>
+                <option>Data Science and Artificial Intelligence</option>
+                <option>Business Administration</option>
+                <option>Accounting</option>
+                <option>E-Marketing and Social Media</option>
+                <option>Business Information Technology</option>
+                <option>Electronics Engineering</option>
+                <option>Computer Engineering</option>
+                <option>Networks and Information Security Engineering</option>
+                <option>Electrical Power and Energy Engineering</option>
+                <option>Communications Engineering / Internet of Things</option>
+              </select>
+            </label>
 
             <input
               type="password"

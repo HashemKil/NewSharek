@@ -8,8 +8,8 @@ import { supabase } from "../../lib/supabase";
 export default function LoginPage() {
   const router = useRouter();
 
-  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [studentId, setStudentId] = useState("");
 
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
@@ -20,8 +20,20 @@ export default function LoginPage() {
     setLoading(true);
 
     try {
+      // Look up the user's email by student ID from the profiles table
+      const { data: profile, error: profileError } = await supabase
+        .from("profiles")
+        .select("email")
+        .eq("student_id", studentId)
+        .single();
+
+      if (profileError || !profile?.email) {
+        setError("No account found for that Student ID.");
+        return;
+      }
+
       const { error } = await supabase.auth.signInWithPassword({
-        email,
+        email: profile.email,
         password,
       });
 
@@ -30,7 +42,7 @@ export default function LoginPage() {
         return;
       }
 
-      router.push("/dashboard");
+      router.push("/home");
     } catch {
       setError("Something went wrong. Please try again.");
     } finally {
@@ -67,10 +79,10 @@ export default function LoginPage() {
 
           <form className="space-y-4" onSubmit={handleLogin}>
             <input
-              type="email"
-              placeholder="University Email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
+              type="text"
+              placeholder="Student ID"
+              value={studentId}
+              onChange={(e) => setStudentId(e.target.value)}
               required
               className={inputClass}
             />
@@ -96,7 +108,7 @@ export default function LoginPage() {
           <div className="mt-5 flex justify-between text-sm">
             <span className="text-gray-500">Don’t have an account?</span>
             <Link href="/register" className="text-[#1e3a8a] hover:underline">
-              Create one
+              Sign Up
             </Link>
           </div>
         </div>

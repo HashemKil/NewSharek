@@ -9,7 +9,7 @@ export default function AppNavbar() {
   const router = useRouter();
 
   const navItems = [
-    { name: "Dashboard", href: "/dashboard" },
+    { name: "Home", href: "/home" },
     { name: "Events", href: "/events" },
     { name: "Teams", href: "/teams" },
     { name: "Profile", href: "/profile" },

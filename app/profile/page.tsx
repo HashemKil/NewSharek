@@ -8,13 +8,18 @@ import { supabase } from "../../lib/supabase";
 
 type Profile = {
   id: string;
-  name: string;
-  major: string;
-  year: string;
-  bio: string;
-  skills: string[];
-  interests: string[];
-  avatar_url: string;
+  full_name: string;
+  email?: string;
+  student_id?: string;
+  major?: string;
+  academic_year?: string;
+  bio?: string;
+  skills?: string[];
+  interests?: string[];
+  avatar_url?: string;
+  is_admin?: boolean;
+  is_club_admin?: boolean;
+  portal_verified?: boolean;
 };
 
 const yearOptions = [
@@ -53,6 +58,10 @@ export default function ProfilePage() {
   const [email, setEmail] = useState("");
   const [profile, setProfile] = useState<Profile | null>(null);
 
+  const [fullName, setFullName] = useState("");
+  const [studentIdState, setStudentIdState] = useState("");
+  const [majorState, setMajorState] = useState("");
+
   const [year, setYear] = useState("");
   const [bio, setBio] = useState("");
   const [skillsInput, setSkillsInput] = useState("");
@@ -89,7 +98,10 @@ export default function ProfilePage() {
         }
 
         setProfile(data);
-        setYear(data.year || "");
+        setFullName(data.full_name || "");
+        setStudentIdState(data.student_id || "");
+        setMajorState(data.major || "");
+        setYear(data.academic_year || "");
         setBio(data.bio || "");
         setSkillsInput(data.skills?.join(", ") || "");
         setInterests(data.interests || []);
@@ -183,7 +195,8 @@ export default function ProfilePage() {
       const { data, error: updateError } = await supabase
         .from("profiles")
         .update({
-          year: year.trim(),
+          student_id: studentIdState.trim(),
+          academic_year: year.trim(),
           bio: bio.trim(),
           skills: cleanedSkills,
           interests,
@@ -199,6 +212,7 @@ export default function ProfilePage() {
       }
 
       setProfile(data);
+      setStudentIdState(data.student_id || "");
       setSuccess("Profile updated successfully.");
       setEditing(false);
     } catch {
@@ -209,7 +223,7 @@ export default function ProfilePage() {
   };
 
   const initials =
-    profile?.name?.trim()?.charAt(0)?.toUpperCase() ||
+    profile?.full_name?.trim()?.charAt(0)?.toUpperCase() ||
     email?.trim()?.charAt(0)?.toUpperCase() ||
     "S";
 
@@ -259,8 +273,8 @@ export default function ProfilePage() {
           </div>
         )}
 
-        <div className="grid gap-6 lg:grid-cols-3">
-          <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm lg:col-span-2">
+        <div className="grid gap-6 justify-center">
+          <div className="w-full max-w-3xl rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
             <div className="flex flex-col gap-6 sm:flex-row sm:items-center">
               <div className="flex flex-col items-center gap-3">
                 <div className="relative flex h-24 w-24 items-center justify-center overflow-hidden rounded-full bg-[#e8eefc] text-3xl font-bold text-[#1e3a8a]">
@@ -300,11 +314,26 @@ export default function ProfilePage() {
 
               <div className="flex-1">
                 <h2 className="text-2xl font-bold text-gray-900">
-                  {profile?.name || "Student User"}
+                  {profile?.full_name || "Student User"}
                 </h2>
-                <p className="mt-1 text-base text-gray-700">
-                  {profile?.major || "Major not specified"}
-                </p>
+                <div className="mt-2 flex items-center gap-2">
+                  {profile?.portal_verified && (
+                    <span className="rounded-full bg-green-50 px-2 py-1 text-xs font-medium text-green-700">
+                      Verified
+                    </span>
+                  )}
+                  {profile?.is_admin && (
+                    <span className="rounded-full bg-[#fef3c7] px-2 py-1 text-xs font-medium text-[#92400e]">
+                      Admin
+                    </span>
+                  )}
+                  {profile?.is_club_admin && (
+                    <span className="rounded-full bg-[#ede9fe] px-2 py-1 text-xs font-medium text-[#6d28d9]">
+                      Club Admin
+                    </span>
+                  )}
+                </div>
+                <p className="mt-1 text-base text-gray-700">{profile?.major || "Major not specified"}</p>
                 <p className="mt-2 text-sm text-gray-500">
                   Princess Sumaya University for Technology
                 </p>
@@ -326,11 +355,14 @@ export default function ProfilePage() {
                   <button
                     onClick={() => {
                       setEditing(false);
-                      setYear(profile?.year || "");
+                      setYear(profile?.academic_year || "");
                       setBio(profile?.bio || "");
                       setSkillsInput(profile?.skills?.join(", ") || "");
                       setInterests(profile?.interests || []);
                       setAvatarUrl(profile?.avatar_url || "");
+                      setFullName(profile?.full_name || "");
+                      setStudentIdState(profile?.student_id || "");
+                      setMajorState(profile?.major || "");
                       setError("");
                       setSuccess("");
                     }}
@@ -357,6 +389,21 @@ export default function ProfilePage() {
               </div>
 
               <div>
+                <h3 className="text-sm font-semibold text-gray-500">Student ID</h3>
+                {!editing ? (
+                  <p className="mt-2 text-base text-gray-900">{profile?.student_id || "Not specified"}</p>
+                ) : (
+                  <input
+                    type="text"
+                    value={studentIdState}
+                    onChange={(e) => setStudentIdState(e.target.value)}
+                    placeholder="Student ID"
+                    className={inputClass}
+                  />
+                )}
+              </div>
+
+              <div>
                 <h3 className="text-sm font-semibold text-gray-500">Major</h3>
                 <p className="mt-2 text-base text-gray-900">
                   {profile?.major || "Not specified"}
@@ -367,7 +414,7 @@ export default function ProfilePage() {
                 <h3 className="text-sm font-semibold text-gray-500">Academic Year</h3>
                 {!editing ? (
                   <p className="mt-2 text-base text-gray-900">
-                    {profile?.year || "Not specified"}
+                    {profile?.academic_year || "Not specified"}
                   </p>
                 ) : (
                   <select
