@@ -1,6 +1,5 @@
 "use client";
 
-import Image from "next/image";
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import AppNavbar from "../../components/AppNavbar";
@@ -106,7 +105,28 @@ export default function ProfilePage() {
         setSkillsInput(data.skills?.join(", ") || "");
         setInterests(data.interests || []);
         setAvatarUrl(data.avatar_url || "");
-      } catch {
+
+        // If avatar_url points to a Supabase public object but the bucket may be private or missing,
+        // try to generate a short-lived signed URL so the image can be displayed.
+        if (data.avatar_url && data.avatar_url.includes("/object/public/avatars/")) {
+          try {
+            const parts = data.avatar_url.split("/object/public/avatars/");
+            const objectPath = parts[1];
+            if (objectPath) {
+              const { data: signedData, error: signedError } = await supabase.storage
+                .from("avatars")
+                .createSignedUrl(objectPath, 60);
+
+              if (!signedError && signedData?.signedUrl) {
+                setAvatarUrl(signedData.signedUrl);
+              }
+            }
+          } catch (err) {
+            console.warn("Could not create signed URL for avatar:", err);
+          }
+        }
+      } catch (err) {
+        console.error("LOAD PROFILE ERROR:", err);
         setError("Something went wrong while loading your profile.");
       } finally {
         setLoading(false);
@@ -150,8 +170,18 @@ export default function ProfilePage() {
     setSuccess("");
 
     try {
-      const fileExt = file.name.split(".").pop();
-      const filePath = `${profile.id}-${Date.now()}.${fileExt}`;
+      const {
+        data: { user },
+        error: userError,
+      } = await supabase.auth.getUser();
+
+      if (userError || !user) {
+        setError("You must be logged in.");
+        return;
+      }
+
+      const fileExt = file.name.split(".").pop() || "jpg";
+      const filePath = `${user.id}/avatar.${fileExt}`;
 
       const { error: uploadError } = await supabase.storage
         .from("avatars")
@@ -160,6 +190,7 @@ export default function ProfilePage() {
         });
 
       if (uploadError) {
+        console.error("UPLOAD ERROR:", uploadError);
         setError(uploadError.message);
         return;
       }
@@ -168,14 +199,45 @@ export default function ProfilePage() {
         .from("avatars")
         .getPublicUrl(filePath);
 
-      const publicUrl = publicUrlData.publicUrl;
+      let publicUrl = publicUrlData?.publicUrl;
 
-      setAvatarUrl(publicUrl);
-      setSuccess("Image uploaded. Click Save to keep it.");
-    } catch {
-      setError("Something went wrong while uploading the image.");
+      // If the bucket is private, create a short-lived signed URL for display
+      if (!publicUrl) {
+        const { data: signedData, error: signedError } = await supabase.storage
+          .from("avatars")
+          .createSignedUrl(filePath, 60);
+
+        if (!signedError && signedData?.signedUrl) {
+          publicUrl = signedData.signedUrl;
+        }
+      }
+
+      const { data: updatedProfile, error: updateError } = await supabase
+        .from("profiles")
+        .update({
+          avatar_url: publicUrl,
+        })
+        .eq("id", user.id)
+        .select()
+        .single();
+
+      if (updateError) {
+        console.error("PROFILE UPDATE ERROR:", updateError);
+        setError(updateError.message);
+        return;
+      }
+
+      setProfile(updatedProfile);
+      setAvatarUrl(updatedProfile.avatar_url || publicUrl);
+      setSuccess("Profile photo updated successfully.");
+    } catch (err) {
+      console.error("IMAGE FLOW ERROR:", err);
+      setError("Something went wrong while updating the photo.");
     } finally {
       setUploadingImage(false);
+      if (fileInputRef.current) {
+        fileInputRef.current.value = "";
+      }
     }
   };
 
@@ -192,17 +254,25 @@ export default function ProfilePage() {
       .filter((skill) => skill.length > 0);
 
     try {
+      const {
+        data: { user },
+        error: userError,
+      } = await supabase.auth.getUser();
+
+      if (userError || !user) {
+        setError("User not authenticated.");
+        return;
+      }
+
       const { data, error: updateError } = await supabase
         .from("profiles")
         .update({
-          student_id: studentIdState.trim(),
-          academic_year: year.trim(),
-          bio: bio.trim(),
+          academic_year: year.trim() || null,
+          bio: bio.trim() || null,
           skills: cleanedSkills,
           interests,
-          avatar_url: avatarUrl,
         })
-        .eq("id", profile.id)
+        .eq("id", user.id)
         .select()
         .single();
 
@@ -212,10 +282,27 @@ export default function ProfilePage() {
       }
 
       setProfile(data);
+      setFullName(data.full_name || "");
       setStudentIdState(data.student_id || "");
+      setMajorState(data.major || "");
+      setYear(data.academic_year || "");
+      setBio(data.bio || "");
+      setSkillsInput(data.skills?.join(", ") || "");
+      setInterests(data.interests || []);
+      setAvatarUrl(data.avatar_url || "");
       setSuccess("Profile updated successfully.");
       setEditing(false);
-    } catch {
+      // Force a full reload after successful save to ensure fresh data
+      if (typeof window !== "undefined") {
+        // small delay to allow state updates to settle
+        setTimeout(() => window.location.reload(), 100);
+      } else {
+        try {
+          router.refresh();
+        } catch (_) {}
+      }
+    } catch (err) {
+      console.error("SAVE PROFILE ERROR:", err);
       setError("Something went wrong while saving your profile.");
     } finally {
       setSaving(false);
@@ -279,11 +366,10 @@ export default function ProfilePage() {
               <div className="flex flex-col items-center gap-3">
                 <div className="relative flex h-24 w-24 items-center justify-center overflow-hidden rounded-full bg-[#e8eefc] text-3xl font-bold text-[#1e3a8a]">
                   {avatarUrl ? (
-                    <Image
+                    <img
                       src={avatarUrl}
                       alt="Profile avatar"
-                      fill
-                      className="object-cover"
+                      className="h-full w-full object-cover"
                     />
                   ) : (
                     initials
@@ -333,7 +419,9 @@ export default function ProfilePage() {
                     </span>
                   )}
                 </div>
-                <p className="mt-1 text-base text-gray-700">{profile?.major || "Major not specified"}</p>
+                <p className="mt-1 text-base text-gray-700">
+                  {profile?.major || "Major not specified"}
+                </p>
                 <p className="mt-2 text-sm text-gray-500">
                   Princess Sumaya University for Technology
                 </p>
@@ -341,6 +429,7 @@ export default function ProfilePage() {
 
               {!editing ? (
                 <button
+                  type="button"
                   onClick={() => {
                     setEditing(true);
                     setSuccess("");
@@ -353,6 +442,7 @@ export default function ProfilePage() {
               ) : (
                 <div className="flex gap-2">
                   <button
+                    type="button"
                     onClick={() => {
                       setEditing(false);
                       setYear(profile?.academic_year || "");
@@ -372,6 +462,7 @@ export default function ProfilePage() {
                   </button>
 
                   <button
+                    type="button"
                     onClick={handleSaveProfile}
                     disabled={saving}
                     className="rounded-xl bg-[#1e3a8a] px-4 py-2 text-sm font-medium text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
@@ -385,22 +476,18 @@ export default function ProfilePage() {
             <div className="mt-8 grid gap-6 sm:grid-cols-2">
               <div>
                 <h3 className="text-sm font-semibold text-gray-500">Email</h3>
-                <p className="mt-2 text-base text-gray-900">{email || "No email"}</p>
+                <p className="mt-2 text-base text-gray-900">
+                  {email || "No email"}
+                </p>
               </div>
 
               <div>
-                <h3 className="text-sm font-semibold text-gray-500">Student ID</h3>
-                {!editing ? (
-                  <p className="mt-2 text-base text-gray-900">{profile?.student_id || "Not specified"}</p>
-                ) : (
-                  <input
-                    type="text"
-                    value={studentIdState}
-                    onChange={(e) => setStudentIdState(e.target.value)}
-                    placeholder="Student ID"
-                    className={inputClass}
-                  />
-                )}
+                <h3 className="text-sm font-semibold text-gray-500">
+                  Student ID
+                </h3>
+                <p className="mt-2 text-base text-gray-900">
+                  {profile?.student_id || "Not specified"}
+                </p>
               </div>
 
               <div>
@@ -411,7 +498,9 @@ export default function ProfilePage() {
               </div>
 
               <div>
-                <h3 className="text-sm font-semibold text-gray-500">Academic Year</h3>
+                <h3 className="text-sm font-semibold text-gray-500">
+                  Academic Year
+                </h3>
                 {!editing ? (
                   <p className="mt-2 text-base text-gray-900">
                     {profile?.academic_year || "Not specified"}
@@ -533,6 +622,18 @@ export default function ProfilePage() {
                 </div>
               )}
             </div>
+
+            {editing && (
+              <div className="mt-8 flex justify-end">
+                <button
+                  type="button"
+                  onClick={handleLogout}
+                  className="rounded-xl border border-red-200 px-4 py-2 text-sm font-medium text-red-600 transition hover:bg-red-50"
+                >
+                  Logout
+                </button>
+              </div>
+            )}
           </div>
         </div>
       </section>
