@@ -55,9 +55,14 @@ export default function EventsPage() {
 
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("All");
-  const [selectedWindow, setSelectedWindow] = useState("This Month");
+  // Time-range filter: Next 7 / 14 / 30 days or All
+  const [selectedWindow, setSelectedWindow] = useState("Next 30 days");
   const [selectedStatus, setSelectedStatus] = useState("All");
   const [selectedDateKey, setSelectedDateKey] = useState("");
+  // Capacity filter: All / Available / Full
+  const [selectedCapacity, setSelectedCapacity] = useState("All");
+  // Sort option: date_asc | date_desc
+  const [selectedSort, setSelectedSort] = useState("date_asc");
   const [joinedEvents, setJoinedEvents] = useState<string[]>([]);
 
   const mapRowToEvent = (row: EventRow): EventItem => {
@@ -238,23 +243,25 @@ export default function EventsPage() {
   }, [normalizedEvents]);
 
   const baseEventsForFilters = useMemo(() => {
+    // Determine days limit based on selectedWindow
     if (selectedWindow === "All") return normalizedEvents;
-    if (selectedWindow === "This Week") {
-      return normalizedEvents.filter((event) => {
-        if (event.status === "ongoing") return true;
-        if (event.daysFromToday === null) return false;
-        return event.daysFromToday >= 0 && event.daysFromToday <= 7;
-      });
-    }
-    if (selectedWindow === "This Month") {
-      return normalizedEvents.filter((event) => {
-        if (event.status === "ongoing") return true;
-        if (event.daysFromToday === null) return false;
-        return event.daysFromToday >= 0 && event.daysFromToday <= 30;
-      });
-    }
-    return normalizedEvents;
-  }, [normalizedEvents, nearEvents, selectedWindow]);
+
+    const mapWindowToDays: Record<string, number | null> = {
+      "Next 7 days": 7,
+      "Next 14 days": 14,
+      "Next 30 days": 30,
+    };
+
+    const daysLimit = mapWindowToDays[selectedWindow] ?? null;
+
+    if (daysLimit === null) return normalizedEvents;
+
+    return normalizedEvents.filter((event) => {
+      if (event.status === "ongoing") return true;
+      if (event.daysFromToday === null) return false;
+      return event.daysFromToday >= 0 && event.daysFromToday <= daysLimit;
+    });
+  }, [normalizedEvents, selectedWindow]);
 
   const categoryOptions = useMemo(() => {
     const categories = Array.from(
@@ -266,7 +273,7 @@ export default function EventsPage() {
   const filteredEvents = useMemo(() => {
     const search = searchTerm.trim().toLowerCase();
 
-    return baseEventsForFilters.filter((event) => {
+    let result = baseEventsForFilters.filter((event) => {
       const matchesSearch =
         !search ||
         event.title.toLowerCase().includes(search) ||
@@ -283,12 +290,34 @@ export default function EventsPage() {
 
       return matchesSearch && matchesCategory && matchesStatus;
     });
+
+    // Capacity filter
+    result = result.filter((event) => {
+      if (selectedCapacity === "All") return true;
+      if (selectedCapacity === "Available") return !event.isFull;
+      if (selectedCapacity === "Full") return event.isFull;
+      return true;
+    });
+
+    // Sort results by selectedSort
+    result.sort((a, b) => {
+      const aDays = a.daysFromToday === null ? Number.POSITIVE_INFINITY : a.daysFromToday;
+      const bDays = b.daysFromToday === null ? Number.POSITIVE_INFINITY : b.daysFromToday;
+
+      if (selectedSort === "date_desc") return bDays - aDays;
+      // default date_asc
+      return aDays - bDays;
+    });
+
+    return result;
   }, [
     baseEventsForFilters,
     searchTerm,
     selectedCategory,
     selectedStatus,
     joinedEvents,
+    selectedCapacity,
+    selectedSort,
   ]);
 
   const groupedDates = useMemo(() => {
@@ -388,7 +417,7 @@ export default function EventsPage() {
         </div>
 
         <div className="mt-6 rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
-          <div className="grid gap-3 lg:grid-cols-4">
+          <div className="grid gap-3 lg:grid-cols-6">
             <input
               type="text"
               placeholder="Search by title, category, or keyword"
@@ -407,20 +436,38 @@ export default function EventsPage() {
                   {c}
                 </option>
               ))}
-            </select>
-
-
-
             <select
-              value={selectedStatus}
-              onChange={(e) => setSelectedStatus(e.target.value)}
+              value={selectedWindow}
+              onChange={(e) => setSelectedWindow(e.target.value)}
               className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-[#1e3a8a] focus:ring-2 focus:ring-[#1e3a8a]/10"
             >
-              <option value="All">All Statuses</option>
+              <option value="Next 7 days">Next 7 days</option>
+              <option value="Next 14 days">Next 14 days</option>
+              <option value="Next 30 days">Next 30 days</option>
+              <option value="All">All Events</option>
+            </select>
               <option value="upcoming">Upcoming</option>
               <option value="ongoing">Ongoing</option>
               <option value="completed">Completed</option>
               <option value="Joined">Joined</option>
+            </select>
+            <select
+              value={selectedCapacity}
+              onChange={(e) => setSelectedCapacity(e.target.value)}
+              className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-[#1e3a8a] focus:ring-2 focus:ring-[#1e3a8a]/10"
+            >
+              <option value="All">All Capacities</option>
+              <option value="Available">Available</option>
+              <option value="Full">Full</option>
+            </select>
+
+            <select
+              value={selectedSort}
+              onChange={(e) => setSelectedSort(e.target.value)}
+              className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-[#1e3a8a] focus:ring-2 focus:ring-[#1e3a8a]/10"
+            >
+              <option value="date_asc">Date: Soon → Later</option>
+              <option value="date_desc">Date: Later → Soon</option>
             </select>
           </div>
 
@@ -429,8 +476,10 @@ export default function EventsPage() {
               onClick={() => {
                 setSearchTerm("");
                 setSelectedCategory("All");
-                setSelectedWindow("This Month");
+                setSelectedWindow("Next 30 days");
                 setSelectedStatus("All");
+                setSelectedCapacity("All");
+                setSelectedSort("date_asc");
               }}
               className="rounded-xl border border-slate-200 px-4 py-3 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
             >
