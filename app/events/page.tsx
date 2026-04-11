@@ -55,7 +55,7 @@ export default function EventsPage() {
 
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("All");
-  const [selectedWindow, setSelectedWindow] = useState("Soon");
+  const [selectedWindow, setSelectedWindow] = useState("This Month");
   const [selectedStatus, setSelectedStatus] = useState("All");
   const [selectedDateKey, setSelectedDateKey] = useState("");
   const [joinedEvents, setJoinedEvents] = useState<string[]>([]);
@@ -253,7 +253,7 @@ export default function EventsPage() {
         return event.daysFromToday >= 0 && event.daysFromToday <= 30;
       });
     }
-    return nearEvents;
+    return normalizedEvents;
   }, [normalizedEvents, nearEvents, selectedWindow]);
 
   const categoryOptions = useMemo(() => {
@@ -409,16 +409,7 @@ export default function EventsPage() {
               ))}
             </select>
 
-            <select
-              value={selectedWindow}
-              onChange={(e) => setSelectedWindow(e.target.value)}
-              className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-[#1e3a8a] focus:ring-2 focus:ring-[#1e3a8a]/10"
-            >
-              <option value="Soon">Soon</option>
-              <option value="This Week">This Week</option>
-              <option value="This Month">This Month</option>
-              <option value="All">All Events</option>
-            </select>
+
 
             <select
               value={selectedStatus}
@@ -438,7 +429,7 @@ export default function EventsPage() {
               onClick={() => {
                 setSearchTerm("");
                 setSelectedCategory("All");
-                setSelectedWindow("Soon");
+                setSelectedWindow("This Month");
                 setSelectedStatus("All");
               }}
               className="rounded-xl border border-slate-200 px-4 py-3 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
