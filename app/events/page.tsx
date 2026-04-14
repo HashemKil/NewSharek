@@ -127,11 +127,8 @@ export default function EventsPage() {
     };
   };
 
-  const getEventTypeLabel = (event: Pick<EventItem, "is_team_based" | "is_university_event">) => {
-    if (event.is_university_event && event.is_team_based) return "University Team";
-    if (event.is_university_event) return "University Solo";
-    if (event.is_team_based) return "Student Team";
-    return "Student Solo";
+  const getEventTypeLabel = (event: Pick<EventItem, "is_team_based">) => {
+    return event.is_team_based ? "Team based" : "Solo";
   };
 
   useEffect(() => {

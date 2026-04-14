@@ -92,13 +92,7 @@ export default function EventDetailsPage() {
 
   const eventDate = event?.event_date ?? event?.date ?? null;
   const isTeamBased = Boolean(event?.is_team_based);
-  const eventTypeLabel = event?.is_university_event
-    ? isTeamBased
-      ? "University Team"
-      : "University Solo"
-    : isTeamBased
-    ? "Student Team"
-    : "Student Solo";
+  const eventTypeLabel = isTeamBased ? "Team based" : "Solo";
 
   const selectedTeam = useMemo(
     () => teams.find((team) => team.id === selectedTeamId) ?? teams[0] ?? null,
@@ -716,11 +710,6 @@ export default function EventDetailsPage() {
                   <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700">
                     {event.category || "Event"}
                   </span>
-                  {isTeamBased && (
-                    <span className="rounded-full bg-[#e8eefc] px-3 py-1 text-xs font-semibold text-[#1e3a8a]">
-                      Team based
-                    </span>
-                  )}
                   <span className="rounded-full bg-green-50 px-3 py-1 text-xs font-semibold text-green-700">
                     {eventTypeLabel}
                   </span>
