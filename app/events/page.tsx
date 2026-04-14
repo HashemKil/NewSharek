@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import AppNavbar from "../../components/AppNavbar";
 import { supabase } from "../../lib/supabase";
@@ -83,12 +83,14 @@ export default function EventsPage() {
   const [selectedDateKey, setSelectedDateKey] = useState("");
   const [jumpToDate, setJumpToDate] = useState("");
   const [joinedEvents, setJoinedEvents] = useState<string[]>([]);
+  const [statusClock, setStatusClock] = useState(0);
 
   const today = useMemo(() => {
+    void statusClock;
     const d = new Date();
     d.setHours(0, 0, 0, 0);
     return d;
-  }, []);
+  }, [statusClock]);
 
   const [currentMonth, setCurrentMonth] = useState(() => {
     const d = new Date();
@@ -123,6 +125,14 @@ export default function EventsPage() {
     if (event.is_team_based) return "Student Team";
     return "Student Solo";
   };
+
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      setStatusClock((value) => value + 1);
+    }, 60_000);
+
+    return () => window.clearInterval(timer);
+  }, []);
 
   useEffect(() => {
     const loadEvents = async () => {
@@ -226,33 +236,61 @@ export default function EventsPage() {
     );
   };
 
-  const computeStatus = (
+  const parseEventDateTime = useCallback((
+    date: string | null,
+    time: string | null,
+    fallback: "start" | "end"
+  ) => {
+    if (!date) return null;
+
+    const [year, month, day] = date.split("-").map(Number);
+    if (!year || !month || !day) return null;
+
+    let hours = fallback === "end" ? 23 : 0;
+    let minutes = fallback === "end" ? 59 : 0;
+    let seconds = fallback === "end" ? 59 : 0;
+
+    if (time) {
+      const [rawHours, rawMinutes, rawSeconds] = time.split(":");
+      hours = Number(rawHours);
+      minutes = Number(rawMinutes ?? 0);
+      seconds = Number(rawSeconds ?? 0);
+    }
+
+    const parsed = new Date(
+      year,
+      month - 1,
+      day,
+      hours,
+      minutes,
+      seconds,
+      fallback === "end" ? 999 : 0
+    );
+
+    return Number.isNaN(parsed.getTime()) ? null : parsed;
+  }, []);
+
+  const computeStatus = useCallback((
     date: string | null,
     start: string | null,
     end: string | null
   ): "upcoming" | "ongoing" | "completed" => {
-    if (!date) return "upcoming";
-
     const now = new Date();
-    const todayLocal = new Date();
-    todayLocal.setHours(0, 0, 0, 0);
+    const startsAt = parseEventDateTime(date, start, "start");
+    const endsAt = parseEventDateTime(date, end, "end");
 
-    const eventDay = new Date(`${date}T00:00:00`);
-    if (Number.isNaN(eventDay.getTime())) return "upcoming";
+    if (!startsAt || !endsAt) return "upcoming";
 
-    if (eventDay > todayLocal) return "upcoming";
-    if (eventDay < todayLocal) return "completed";
-
-    const currentTime = now.toTimeString().slice(0, 5);
-
-    if (start && currentTime < start) return "upcoming";
-    if (start && end && currentTime >= start && currentTime <= end) {
-      return "ongoing";
+    const effectiveEndsAt = new Date(endsAt);
+    if (effectiveEndsAt < startsAt) {
+      effectiveEndsAt.setDate(effectiveEndsAt.getDate() + 1);
     }
-    if (end && currentTime > end) return "completed";
 
-    return "upcoming";
-  };
+    if (now < startsAt) return "upcoming";
+    if (now > effectiveEndsAt) return "completed";
+
+    return "ongoing";
+  }, [parseEventDateTime]);
 
   const formatDateInfo = (value: string | null) => {
     if (!value) {
@@ -317,15 +355,13 @@ export default function EventsPage() {
         displayDate: dateInfo.displayDate,
         parsedDate: dateInfo.parsed,
         timeLabel: formatTimeLabel(event.start_time, event.end_time),
-        status:
-          event.computed_status ??
-          computeStatus(event.date, event.start_time, event.end_time),
+        status: computeStatus(event.date, event.start_time, event.end_time),
         fillPercentage: max > 0 ? Math.min((registered / max) * 100, 100) : 0,
         isFull: max > 0 && registered >= max,
         daysFromToday,
       };
     });
-  }, [events, today]);
+  }, [computeStatus, events, today]);
 
   const baseEvents = useMemo(() => normalizedEvents, [normalizedEvents]);
 
