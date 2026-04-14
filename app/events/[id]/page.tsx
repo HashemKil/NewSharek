@@ -17,6 +17,7 @@ type EventRow = {
   end_time?: string | null;
   location?: string | null;
   source_url?: string | null;
+  club_id?: string | null;
   registered_count?: number | null;
   max_capacity?: number | null;
   approval_status?: string | null;
@@ -31,6 +32,16 @@ type Profile = {
   student_id: string | null;
   major: string | null;
   academic_year: string | null;
+};
+
+type ClubRow = {
+  id: string;
+  name?: string | null;
+  title?: string | null;
+  description?: string | null;
+  email?: string | null;
+  website_url?: string | null;
+  instagram_url?: string | null;
 };
 
 type Team = {
@@ -82,6 +93,7 @@ export default function EventDetailsPage() {
   const [currentEventTeamName, setCurrentEventTeamName] = useState("");
   const [statusClock, setStatusClock] = useState(0);
   const [isRegistered, setIsRegistered] = useState(false);
+  const [responsibleClub, setResponsibleClub] = useState<ClubRow | null>(null);
 
   const [teamName, setTeamName] = useState("");
   const [teamDescription, setTeamDescription] = useState("");
@@ -93,6 +105,10 @@ export default function EventDetailsPage() {
   const eventDate = event?.event_date ?? event?.date ?? null;
   const isTeamBased = Boolean(event?.is_team_based);
   const eventTypeLabel = isTeamBased ? "Team based" : "Solo based";
+  const responsibleClubName =
+    responsibleClub?.name?.trim() ||
+    responsibleClub?.title?.trim() ||
+    "University club";
 
   const selectedTeam = useMemo(
     () => teams.find((team) => team.id === selectedTeamId) ?? teams[0] ?? null,
@@ -241,6 +257,18 @@ export default function EventDetailsPage() {
 
       const loadedEvent = eventResult.data as EventRow;
       setEvent(loadedEvent);
+
+      if (loadedEvent.is_university_event && loadedEvent.club_id) {
+        const { data: clubData } = await supabase
+          .from("clubs")
+          .select("*")
+          .eq("id", loadedEvent.club_id)
+          .maybeSingle();
+
+        setResponsibleClub((clubData as ClubRow | null) ?? null);
+      } else {
+        setResponsibleClub(null);
+      }
 
       const { data: registrationData } = await supabase
         .from("event_registrations")
@@ -715,6 +743,11 @@ export default function EventDetailsPage() {
                   <span className={eventTypeBadgeClass}>
                     {eventTypeLabel}
                   </span>
+                  {event.is_university_event && responsibleClub && (
+                    <span className={eventTypeBadgeClass}>
+                      {responsibleClubName}
+                    </span>
+                  )}
                   <span
                     className={`rounded-full border px-3 py-1 text-xs font-semibold ${getStatusBadge(
                       eventStatus
@@ -764,6 +797,16 @@ export default function EventDetailsPage() {
                       {event.max_capacity ? ` / ${event.max_capacity}` : ""}
                     </p>
                   </div>
+                  {event.is_university_event && responsibleClub && (
+                    <div className="rounded-lg bg-slate-50 p-4">
+                      <p className="text-xs font-semibold uppercase text-slate-400">
+                        Responsible club
+                      </p>
+                      <p className="mt-1 font-medium text-slate-800">
+                        {responsibleClubName}
+                      </p>
+                    </div>
+                  )}
                 </div>
 
                 {event.source_url && (

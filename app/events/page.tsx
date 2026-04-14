@@ -22,6 +22,7 @@ type EventRow = {
   computed_status?: "upcoming" | "ongoing" | "completed" | null;
   is_team_based?: boolean | null;
   is_university_event?: boolean | null;
+  responsible_club?: string | null;
 };
 
 type EventItem = {
@@ -40,6 +41,7 @@ type EventItem = {
   computed_status?: "upcoming" | "ongoing" | "completed";
   is_team_based: boolean;
   is_university_event: boolean;
+  responsible_club: string | null;
 };
 
 type NormalizedEvent = EventItem & {
@@ -63,7 +65,19 @@ type TeamMembershipRow = {
   teams?: { event?: string | null } | { event?: string | null }[] | null;
 };
 
-type EventTypeRow = Pick<EventRow, "id" | "is_team_based" | "is_university_event">;
+type EventTypeRow = Pick<
+  EventRow,
+  "id" | "is_team_based" | "is_university_event" | "club_id"
+>;
+
+type ClubRow = {
+  id: string;
+  name?: string | null;
+  title?: string | null;
+};
+
+const getClubName = (club: ClubRow) =>
+  club.name?.trim() || club.title?.trim() || "University club";
 
 const STATUS_TABS = [
   "All Statuses",
@@ -126,8 +140,37 @@ export default function EventsPage() {
       computed_status: row.computed_status ?? undefined,
       is_team_based: Boolean(row.is_team_based),
       is_university_event: Boolean(row.is_university_event),
+      responsible_club: row.responsible_club ?? null,
     };
   };
+
+  const attachResponsibleClubs = useCallback(async (items: EventItem[]) => {
+    const clubIds = Array.from(
+      new Set(
+        items
+          .filter((event) => event.is_university_event && event.club_id)
+          .map((event) => event.club_id as string)
+      )
+    );
+
+    if (clubIds.length === 0) return items;
+
+    const { data: clubData } = await supabase
+      .from("clubs")
+      .select("*")
+      .in("id", clubIds);
+
+    const clubNameById = new Map(
+      ((clubData || []) as ClubRow[]).map((club) => [club.id, getClubName(club)])
+    );
+
+    return items.map((event) => ({
+      ...event,
+      responsible_club: event.club_id
+        ? clubNameById.get(event.club_id) ?? event.responsible_club
+        : event.responsible_club,
+    }));
+  }, []);
 
   const getEventTypeLabel = (event: Pick<EventItem, "is_team_based">) => {
     return event.is_team_based ? "Team based" : "Solo based";
@@ -158,7 +201,7 @@ export default function EventsPage() {
           const eventIds = (viewData as EventRow[]).map((event) => event.id);
           const { data: typeData } = await supabase
             .from("events")
-            .select("id, is_team_based, is_university_event")
+            .select("id, is_team_based, is_university_event, club_id")
             .in("id", eventIds);
 
           const typeByEventId = new Map(
@@ -177,8 +220,10 @@ export default function EventsPage() {
               is_university_event:
                 typeByEventId.get(event.id)?.is_university_event ??
                 event.is_university_event,
+              club_id: typeByEventId.get(event.id)?.club_id ?? event.club_id,
             })
           );
+          loadedEvents = await attachResponsibleClubs(loadedEvents);
           setEvents(loadedEvents);
           setLoading(false);
           loadJoinedEvents(loadedEvents);
@@ -196,7 +241,9 @@ export default function EventsPage() {
           return;
         }
 
-        loadedEvents = ((tableData as EventRow[]) || []).map(mapRowToEvent);
+        loadedEvents = await attachResponsibleClubs(
+          ((tableData as EventRow[]) || []).map(mapRowToEvent)
+        );
         setEvents(loadedEvents);
         setLoading(false);
         loadJoinedEvents(loadedEvents);
@@ -210,7 +257,7 @@ export default function EventsPage() {
     };
 
     loadEvents();
-  }, []);
+  }, [attachResponsibleClubs]);
 
   const loadJoinedEvents = async (loadedEvents: EventItem[]) => {
     const {
@@ -416,7 +463,8 @@ export default function EventsPage() {
           event.title.toLowerCase().includes(search) ||
           event.description.toLowerCase().includes(search) ||
           event.category.toLowerCase().includes(search) ||
-          event.location.toLowerCase().includes(search);
+          event.location.toLowerCase().includes(search) ||
+          (event.responsible_club || "").toLowerCase().includes(search);
 
         const matchesStatus =
           selectedStatus === "All Statuses" ||
@@ -898,6 +946,11 @@ export default function EventsPage() {
                             <span className={eventTypeBadgeClass}>
                               {getEventTypeLabel(event)}
                             </span>
+                            {event.is_university_event && event.responsible_club && (
+                              <span className="rounded-full border border-[#c7d5fb] bg-[#eef3ff] px-3 py-1 text-xs font-semibold text-[#1e3a8a]">
+                                {event.responsible_club}
+                              </span>
+                            )}
 
                             <span
                               className={`rounded-full border px-3 py-1 text-xs font-semibold ${getStatusBadge(
