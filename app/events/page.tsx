@@ -243,7 +243,8 @@ export default function EventsPage() {
   ) => {
     if (!date) return null;
 
-    const [year, month, day] = date.split("-").map(Number);
+    const datePart = date.split("T")[0];
+    const [year, month, day] = datePart.split("-").map(Number);
     if (!year || !month || !day) return null;
 
     let hours = fallback === "end" ? 23 : 0;
@@ -256,6 +257,8 @@ export default function EventsPage() {
       minutes = Number(rawMinutes ?? 0);
       seconds = Number(rawSeconds ?? 0);
     }
+
+    if (![hours, minutes, seconds].every(Number.isFinite)) return null;
 
     const parsed = new Date(
       year,

@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import AppNavbar from "../../../components/AppNavbar";
 import { supabase } from "../../../lib/supabase";
@@ -64,6 +64,7 @@ const inputClass =
   "w-full rounded-lg border border-slate-300 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-[#1e3a8a] focus:ring-2 focus:ring-[#1e3a8a]/10";
 
 const TEAM_MEMBER_LIMIT = 6;
+type EventStatus = "upcoming" | "ongoing" | "completed";
 
 export default function EventDetailsPage() {
   const params = useParams();
@@ -79,6 +80,7 @@ export default function EventDetailsPage() {
   const [success, setSuccess] = useState("");
   const [selectedTeamId, setSelectedTeamId] = useState<string | null>(null);
   const [currentEventTeamName, setCurrentEventTeamName] = useState("");
+  const [statusClock, setStatusClock] = useState(0);
 
   const [teamName, setTeamName] = useState("");
   const [teamDescription, setTeamDescription] = useState("");
@@ -102,10 +104,75 @@ export default function EventDetailsPage() {
     [selectedTeamId, teams]
   );
 
+  const parseEventDateTime = useCallback((
+    date: string | null,
+    time: string | null,
+    fallback: "start" | "end"
+  ) => {
+    if (!date) return null;
+
+    const datePart = date.split("T")[0];
+    const [year, month, day] = datePart.split("-").map(Number);
+    if (!year || !month || !day) return null;
+
+    let hours = fallback === "end" ? 23 : 0;
+    let minutes = fallback === "end" ? 59 : 0;
+    let seconds = fallback === "end" ? 59 : 0;
+
+    if (time) {
+      const [rawHours, rawMinutes, rawSeconds] = time.split(":");
+      hours = Number(rawHours);
+      minutes = Number(rawMinutes ?? 0);
+      seconds = Number(rawSeconds ?? 0);
+    }
+
+    if (![hours, minutes, seconds].every(Number.isFinite)) return null;
+
+    const parsed = new Date(
+      year,
+      month - 1,
+      day,
+      hours,
+      minutes,
+      seconds,
+      fallback === "end" ? 999 : 0
+    );
+
+    return Number.isNaN(parsed.getTime()) ? null : parsed;
+  }, []);
+
+  const computeStatus = useCallback((
+    date: string | null,
+    start: string | null,
+    end: string | null
+  ): EventStatus => {
+    const now = new Date();
+    const startsAt = parseEventDateTime(date, start, "start");
+    const endsAt = parseEventDateTime(date, end, "end");
+
+    if (!startsAt || !endsAt) return "upcoming";
+
+    const effectiveEndsAt = new Date(endsAt);
+    if (effectiveEndsAt < startsAt) {
+      effectiveEndsAt.setDate(effectiveEndsAt.getDate() + 1);
+    }
+
+    if (now < startsAt) return "upcoming";
+    if (now > effectiveEndsAt) return "completed";
+
+    return "ongoing";
+  }, [parseEventDateTime]);
+
+  const eventStatus = useMemo(() => {
+    void statusClock;
+    return computeStatus(eventDate, event?.start_time ?? null, event?.end_time ?? null);
+  }, [computeStatus, eventDate, event?.end_time, event?.start_time, statusClock]);
+  const isCompleted = eventStatus === "completed";
+
   const formatDate = (value: string | null) => {
     if (!value) return "Date not set";
-    const parsed = new Date(`${value}T00:00:00`);
-    if (Number.isNaN(parsed.getTime())) return value;
+    const parsed = parseEventDateTime(value, null, "start");
+    if (!parsed) return value;
 
     return parsed.toLocaleDateString("en-GB", {
       day: "2-digit",
@@ -130,6 +197,12 @@ export default function EventDetailsPage() {
     event?.start_time && event?.end_time
       ? `${formatTime(event.start_time)} - ${formatTime(event.end_time)}`
       : formatTime(event?.start_time) || "Time not set";
+
+  const getStatusBadge = (status: EventStatus) => {
+    if (status === "ongoing") return "bg-green-50 text-green-700";
+    if (status === "completed") return "bg-slate-100 text-slate-600";
+    return "bg-blue-50 text-blue-700";
+  };
 
   const loadDetails = async () => {
     if (!id) return;
@@ -250,12 +323,25 @@ export default function EventDetailsPage() {
   };
 
   useEffect(() => {
+    const timer = window.setInterval(() => {
+      setStatusClock((value) => value + 1);
+    }, 60_000);
+
+    return () => window.clearInterval(timer);
+  }, []);
+
+  useEffect(() => {
     loadDetails();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id, router]);
 
   const registerForEvent = async () => {
     if (!event || !profile) return false;
+
+    if (isCompleted) {
+      setError("This event is completed. Registration is closed.");
+      return false;
+    }
 
     const { error: registrationError } = await supabase
       .from("event_registrations")
@@ -592,6 +678,13 @@ export default function EventDetailsPage() {
                   <span className="rounded-full bg-green-50 px-3 py-1 text-xs font-semibold text-green-700">
                     {eventTypeLabel}
                   </span>
+                  <span
+                    className={`rounded-full px-3 py-1 text-xs font-semibold ${getStatusBadge(
+                      eventStatus
+                    )}`}
+                  >
+                    {eventStatus}
+                  </span>
                 </div>
 
                 <h1 className="mt-4 text-3xl font-bold text-slate-950">
@@ -656,6 +749,11 @@ export default function EventDetailsPage() {
                   <p className="mt-2 text-sm text-slate-500">
                     View members and request to join the team that fits you.
                   </p>
+                  {isCompleted && (
+                    <p className="mt-3 rounded-lg bg-slate-100 px-4 py-3 text-sm font-medium text-slate-600">
+                      This event is completed. Team requests are closed.
+                    </p>
+                  )}
                   {currentEventTeamName && (
                     <p className="mt-3 rounded-lg bg-[#eef3ff] px-4 py-3 text-sm font-medium text-[#1e3a8a]">
                       You are already in {currentEventTeamName} for this event.
@@ -711,10 +809,14 @@ export default function EventDetailsPage() {
                   <button
                     type="button"
                     onClick={handleJoinEvent}
-                    disabled={saving}
+                    disabled={saving || isCompleted}
                     className="mt-5 rounded-lg bg-[#1e3a8a] px-5 py-3 text-sm font-semibold text-white hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
                   >
-                    {saving ? "Joining..." : "Join event"}
+                    {isCompleted
+                      ? "Completed"
+                      : saving
+                      ? "Joining..."
+                      : "Join event"}
                   </button>
                 </section>
               )}
@@ -800,11 +902,14 @@ export default function EventDetailsPage() {
                         selectedTeam.currentUserMemberStatus !== "pending") ||
                       (Boolean(currentEventTeamName) &&
                         selectedTeam.currentUserMemberStatus !== "pending") ||
-                      selectedTeam.memberCount >= TEAM_MEMBER_LIMIT
+                      selectedTeam.memberCount >= TEAM_MEMBER_LIMIT ||
+                      isCompleted
                     }
                     className="mt-5 w-full rounded-lg bg-[#1e3a8a] px-5 py-3 text-sm font-semibold text-white hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
                   >
-                    {selectedTeam.currentUserMemberStatus === "pending"
+                    {isCompleted
+                      ? "Completed"
+                      : selectedTeam.currentUserMemberStatus === "pending"
                       ? saving
                         ? "Cancelling..."
                         : "Cancel request"
@@ -922,10 +1027,12 @@ export default function EventDetailsPage() {
                   </div>
                   <button
                     type="submit"
-                    disabled={saving || Boolean(currentEventTeamName)}
+                    disabled={saving || Boolean(currentEventTeamName) || isCompleted}
                     className="mt-4 w-full rounded-lg bg-[#1e3a8a] px-5 py-3 text-sm font-semibold text-white hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
                   >
-                    {currentEventTeamName
+                    {isCompleted
+                      ? "Completed"
+                      : currentEventTeamName
                       ? "Already in a team"
                       : saving
                       ? "Creating..."
