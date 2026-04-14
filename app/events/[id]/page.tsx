@@ -81,6 +81,7 @@ export default function EventDetailsPage() {
   const [selectedTeamId, setSelectedTeamId] = useState<string | null>(null);
   const [currentEventTeamName, setCurrentEventTeamName] = useState("");
   const [statusClock, setStatusClock] = useState(0);
+  const [isRegistered, setIsRegistered] = useState(false);
 
   const [teamName, setTeamName] = useState("");
   const [teamDescription, setTeamDescription] = useState("");
@@ -245,6 +246,14 @@ export default function EventDetailsPage() {
       const loadedEvent = eventResult.data as EventRow;
       setEvent(loadedEvent);
 
+      const { data: registrationData } = await supabase
+        .from("event_registrations")
+        .select("id")
+        .eq("event_id", loadedEvent.id)
+        .eq("user_id", user.id)
+        .maybeSingle();
+      setIsRegistered(Boolean(registrationData));
+
       const title = loadedEvent.title ?? "";
       const { data: teamData, error: teamError } = await supabase
         .from("teams")
@@ -378,6 +387,35 @@ export default function EventDetailsPage() {
       if (!registered) return;
 
       setSuccess("You are registered for this event.");
+      setIsRegistered(true);
+      await loadDetails();
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleLeaveEvent = async () => {
+    if (!event || !profile) return;
+
+    setSaving(true);
+    setError("");
+    setSuccess("");
+
+    try {
+      const { error: leaveError } = await supabase
+        .from("event_registrations")
+        .delete()
+        .eq("event_id", event.id)
+        .eq("user_id", profile.id);
+
+      if (leaveError) {
+        setError(leaveError.message);
+        return;
+      }
+
+      setIsRegistered(false);
+      setSuccess("You left this event.");
+      await loadDetails();
     } finally {
       setSaving(false);
     }
@@ -800,22 +838,29 @@ export default function EventDetailsPage() {
               ) : (
                 <section className="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
                   <h2 className="text-xl font-bold text-slate-950">
-                    Join this event
+                    {isRegistered ? "You are registered" : "Join this event"}
                   </h2>
                   <p className="mt-2 text-sm leading-6 text-slate-500">
-                    Your name, email, student ID, major, and academic year will be
-                    copied from your profile into the event registration.
+                    {isRegistered
+                      ? "You can leave this event if you no longer want to participate."
+                      : "Your name, email, student ID, major, and academic year will be copied from your profile into the event registration."}
                   </p>
                   <button
                     type="button"
-                    onClick={handleJoinEvent}
+                    onClick={isRegistered ? handleLeaveEvent : handleJoinEvent}
                     disabled={saving || isCompleted}
-                    className="mt-5 rounded-lg bg-[#1e3a8a] px-5 py-3 text-sm font-semibold text-white hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
+                    className={`mt-5 rounded-lg px-5 py-3 text-sm font-semibold text-white hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60 ${
+                      isRegistered ? "bg-red-600" : "bg-[#1e3a8a]"
+                    }`}
                   >
                     {isCompleted
                       ? "Completed"
                       : saving
-                      ? "Joining..."
+                      ? isRegistered
+                        ? "Leaving..."
+                        : "Joining..."
+                      : isRegistered
+                      ? "Leave event"
                       : "Join event"}
                   </button>
                 </section>
