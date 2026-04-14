@@ -194,10 +194,13 @@ export default function EventDetailsPage() {
       : formatTime(event?.start_time) || "Time not set";
 
   const getStatusBadge = (status: EventStatus) => {
-    if (status === "ongoing") return "bg-green-50 text-green-700";
-    if (status === "completed") return "bg-slate-100 text-slate-600";
-    return "bg-blue-50 text-blue-700";
+    if (status === "ongoing") return "border-green-200 bg-green-50 text-green-700";
+    if (status === "completed") return "border-slate-200 bg-slate-100 text-slate-600";
+    return "border-blue-200 bg-blue-50 text-blue-700";
   };
+
+  const eventTypeBadgeClass =
+    "rounded-full border border-[#c7d5fb] bg-[#eef3ff] px-3 py-1 text-xs font-semibold text-[#1e3a8a]";
 
   const loadDetails = async () => {
     if (!id) return;
@@ -710,11 +713,11 @@ export default function EventDetailsPage() {
                   <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700">
                     {event.category || "Event"}
                   </span>
-                  <span className="rounded-full bg-green-50 px-3 py-1 text-xs font-semibold text-green-700">
+                  <span className={eventTypeBadgeClass}>
                     {eventTypeLabel}
                   </span>
                   <span
-                    className={`rounded-full px-3 py-1 text-xs font-semibold ${getStatusBadge(
+                    className={`rounded-full border px-3 py-1 text-xs font-semibold ${getStatusBadge(
                       eventStatus
                     )}`}
                   >

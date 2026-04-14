@@ -576,6 +576,9 @@ export default function EventsPage() {
     return "bg-blue-50 text-blue-700 border-blue-200";
   };
 
+  const eventTypeBadgeClass =
+    "rounded-full border border-[#c7d5fb] bg-[#eef3ff] px-3 py-1 text-xs font-semibold text-[#1e3a8a]";
+
   const resetFilters = () => {
     setSearchTerm("");
     setSelectedStatus("All Statuses");
@@ -850,7 +853,7 @@ export default function EventsPage() {
                             <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700">
                               {event.category}
                             </span>
-                            <span className="rounded-full bg-[#eef3ff] px-3 py-1 text-xs font-semibold text-[#1e3a8a]">
+                            <span className={eventTypeBadgeClass}>
                               {getEventTypeLabel(event)}
                             </span>
 
