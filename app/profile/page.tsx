@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import Image from "next/image";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import AppNavbar from "../../components/AppNavbar";
 import { supabase } from "../../lib/supabase";
@@ -20,6 +22,40 @@ type Profile = {
   is_club_admin?: boolean;
   portal_verified?: boolean;
 };
+
+type Team = {
+  id: string;
+  name: string;
+  event: string | null;
+  description: string | null;
+  needed_skills: string | null;
+  max_members: number | null;
+  owner_id: string | null;
+  is_open_to_members?: boolean | null;
+};
+
+type TeamMember = {
+  id: string;
+  team_id: string;
+  user_id: string;
+  status: "pending" | "approved" | "rejected";
+  profiles?: Profile | Profile[] | null;
+};
+
+type OwnedTeam = Team & {
+  members: TeamMember[];
+};
+
+type TeamMembership = TeamMember & {
+  teams?: Team | Team[] | null;
+};
+
+type MemberTeam = Team & {
+  membershipId: string;
+  membershipStatus: "pending" | "approved" | "rejected";
+};
+
+const TEAM_MEMBER_LIMIT = 6;
 
 const yearOptions = [
   "1st Year",
@@ -66,6 +102,141 @@ export default function ProfilePage() {
   const [skillsInput, setSkillsInput] = useState("");
   const [interests, setInterests] = useState<string[]>([]);
   const [avatarUrl, setAvatarUrl] = useState("");
+  const [ownedTeams, setOwnedTeams] = useState<OwnedTeam[]>([]);
+  const [memberTeams, setMemberTeams] = useState<MemberTeam[]>([]);
+  const [teamActionId, setTeamActionId] = useState("");
+  const [addMemberInputs, setAddMemberInputs] = useState<Record<string, string>>({});
+  const [editingTeamId, setEditingTeamId] = useState("");
+  const [teamEditValues, setTeamEditValues] = useState<
+    Record<
+      string,
+      {
+        name: string;
+        description: string;
+        neededSkills: string;
+        maxMembers: string;
+        isOpenToMembers: boolean;
+      }
+    >
+  >({});
+
+  const loadOwnedTeams = async (userId: string) => {
+    const { data: teamsData, error: teamsError } = await supabase
+      .from("teams")
+      .select("*")
+      .eq("owner_id", userId)
+      .order("created_at", { ascending: false });
+
+    if (teamsError) {
+      console.warn("Could not load owned teams:", teamsError.message);
+      setOwnedTeams([]);
+      return;
+    }
+
+    const teams = (teamsData || []) as Team[];
+
+    if (teams.length === 0) {
+      setOwnedTeams([]);
+      return;
+    }
+
+    const { data: membersData, error: membersError } = await supabase
+      .from("team_members")
+      .select(
+        "id, team_id, user_id, status, profiles(id, full_name, email, student_id, major, academic_year)"
+      )
+      .in(
+        "team_id",
+        teams.map((team) => team.id)
+      );
+
+    if (membersError) {
+      console.warn("Could not load team members:", membersError.message);
+    }
+
+    const members = (membersData || []) as TeamMember[];
+    const nextOwnedTeams = teams.map((team) => ({
+      ...team,
+      members: members.filter((member) => member.team_id === team.id),
+    }));
+
+    const fullTeams = nextOwnedTeams.filter((team) => {
+      const approvedCount = team.members.filter(
+        (member) => member.status === "approved"
+      ).length;
+      const hasPending = team.members.some((member) => member.status === "pending");
+      return approvedCount >= TEAM_MEMBER_LIMIT && (team.is_open_to_members !== false || hasPending);
+    });
+
+    const fullTeamIds = new Set(fullTeams.map((team) => team.id));
+    const displayedTeams = nextOwnedTeams.map((team) => {
+      if (!fullTeamIds.has(team.id)) return team;
+
+      return {
+        ...team,
+        is_open_to_members: false,
+        members: team.members.map((member) =>
+          member.status === "pending"
+            ? { ...member, status: "rejected" as const }
+            : member
+        ),
+      };
+    });
+
+    setOwnedTeams(displayedTeams);
+
+    if (fullTeams.length > 0) {
+      Promise.all(
+        fullTeams.map(async (team) => {
+          await supabase
+            .from("teams")
+            .update({ is_open_to_members: false })
+            .eq("id", team.id);
+
+          await supabase
+            .from("team_members")
+            .update({ status: "rejected" })
+            .eq("team_id", team.id)
+            .eq("status", "pending");
+        })
+      ).catch((err) => {
+        console.warn("Could not close full teams:", err);
+      });
+    }
+  };
+
+  const loadMemberTeams = async (userId: string) => {
+    const { data, error: membershipsError } = await supabase
+      .from("team_members")
+      .select("id, team_id, user_id, status, teams(*)")
+      .eq("user_id", userId)
+      .neq("status", "rejected");
+
+    if (membershipsError) {
+      console.warn("Could not load team memberships:", membershipsError.message);
+      setMemberTeams([]);
+      return;
+    }
+
+    const memberships = (data || []) as TeamMembership[];
+    const teams = memberships
+      .map((membership) => {
+        const team = Array.isArray(membership.teams)
+          ? membership.teams[0]
+          : membership.teams;
+
+        if (!team || team.owner_id === userId) return null;
+
+        return {
+          ...team,
+          membershipId: membership.id,
+          membershipStatus: membership.status,
+        };
+      })
+      .filter(Boolean) as MemberTeam[];
+
+    setMemberTeams(teams);
+  };
 
   useEffect(() => {
     const loadProfile = async () => {
@@ -105,6 +276,9 @@ export default function ProfilePage() {
         setSkillsInput(data.skills?.join(", ") || "");
         setInterests(data.interests || []);
         setAvatarUrl(data.avatar_url || "");
+        await Promise.all([loadOwnedTeams(user.id), loadMemberTeams(user.id)]);
+
+        setLoading(false);
 
         // If avatar_url points to a Supabase public object but the bucket may be private or missing,
         // try to generate a short-lived signed URL so the image can be displayed.
@@ -299,13 +473,422 @@ export default function ProfilePage() {
       } else {
         try {
           router.refresh();
-        } catch (_) {}
+        } catch {
+          // ignore
+        }
       }
     } catch (err) {
       console.error("SAVE PROFILE ERROR:", err);
       setError("Something went wrong while saving your profile.");
     } finally {
       setSaving(false);
+    }
+  };
+
+  const closeTeamAndRejectPending = async (teamId: string) => {
+    const { error: closeError } = await supabase
+      .from("teams")
+      .update({ is_open_to_members: false })
+      .eq("id", teamId);
+
+    if (closeError) {
+      setError(closeError.message);
+      return false;
+    }
+
+    const { error: rejectError } = await supabase
+      .from("team_members")
+      .update({ status: "rejected" })
+      .eq("team_id", teamId)
+      .eq("status", "pending");
+
+    if (rejectError) {
+      setError(rejectError.message);
+      return false;
+    }
+
+    return true;
+  };
+
+  const handleTeamApplication = async (
+    team: OwnedTeam,
+    member: TeamMember,
+    status: "approved" | "rejected"
+  ) => {
+    if (!profile) return;
+
+    setTeamActionId(member.id);
+    setError("");
+    setSuccess("");
+
+    try {
+      const approvedCount = team.members.filter(
+        (teamMember) => teamMember.status === "approved"
+      ).length;
+
+      if (status === "approved") {
+        const { data: eventTeams } = await supabase
+          .from("teams")
+          .select("id, name")
+          .ilike("event", team.event || "");
+
+        const eventTeamRows = (eventTeams || []) as Pick<Team, "id" | "name">[];
+        const otherTeamIds = eventTeamRows
+          .map((eventTeam) => eventTeam.id)
+          .filter((teamId) => teamId !== team.id);
+
+        if (otherTeamIds.length > 0) {
+          const { data: existingMemberships, error: membershipError } =
+            await supabase
+              .from("team_members")
+              .select("team_id, user_id, status")
+              .in("team_id", otherTeamIds)
+              .eq("user_id", member.user_id)
+              .neq("status", "rejected");
+
+          if (membershipError) {
+            setError(membershipError.message);
+            return;
+          }
+
+          if ((existingMemberships || []).length > 0) {
+            const memberProfile = Array.isArray(member.profiles)
+              ? member.profiles[0]
+              : member.profiles;
+            setError(
+              `The member with Student ID ${
+                memberProfile?.student_id || "unknown"
+              } is already in a team for this event.`
+            );
+            return;
+          }
+        }
+      }
+
+      if (status === "approved" && approvedCount >= TEAM_MEMBER_LIMIT) {
+        const closed = await closeTeamAndRejectPending(team.id);
+        if (!closed) return;
+        setSuccess("Team is already full. Pending applications were rejected.");
+        await loadOwnedTeams(profile.id);
+        return;
+      }
+
+      const { error: updateError } = await supabase
+        .from("team_members")
+        .update({ status })
+        .eq("id", member.id);
+
+      if (updateError) {
+        setError(updateError.message);
+        return;
+      }
+
+      if (status === "approved" && approvedCount + 1 >= TEAM_MEMBER_LIMIT) {
+        const closed = await closeTeamAndRejectPending(team.id);
+        if (!closed) return;
+        setSuccess("Member approved. Team is now full, so remaining applications were rejected.");
+      } else {
+        setSuccess(status === "approved" ? "Member approved." : "Application rejected.");
+      }
+
+      await loadOwnedTeams(profile.id);
+    } finally {
+      setTeamActionId("");
+    }
+  };
+
+  const handleAddMembersByStudentId = async (team: OwnedTeam) => {
+    if (!profile) return;
+
+    const requestedMemberIds = Array.from(
+      new Set((addMemberInputs[team.id] || "").match(/\d{8}/g) ?? [])
+    ).filter((studentId) => studentId !== profile.student_id);
+
+    if (requestedMemberIds.length === 0) {
+      setError("Enter at least one valid 8-digit Student ID.");
+      return;
+    }
+
+    const approvedCount = team.members.filter(
+      (member) => member.status === "approved"
+    ).length;
+    const remainingSlots = TEAM_MEMBER_LIMIT - approvedCount;
+
+    if (remainingSlots <= 0) {
+      const closed = await closeTeamAndRejectPending(team.id);
+      if (closed) {
+        setSuccess("Team is already full. Pending applications were rejected.");
+        await loadOwnedTeams(profile.id);
+      }
+      return;
+    }
+
+    if (requestedMemberIds.length > remainingSlots) {
+      setError(`You can add up to ${remainingSlots} member(s) to this team.`);
+      return;
+    }
+
+    setTeamActionId(`add-${team.id}`);
+    setError("");
+    setSuccess("");
+
+    try {
+      const { data: matchedProfiles, error: profileLookupError } = await supabase
+        .from("profiles")
+        .select("id, full_name, email, student_id, major, academic_year")
+        .in("student_id", requestedMemberIds);
+
+      if (profileLookupError) {
+        setError(profileLookupError.message);
+        return;
+      }
+
+      const invitedProfiles = (matchedProfiles || []) as Profile[];
+      const foundIds = new Set(
+        invitedProfiles
+          .map((member) => member.student_id)
+          .filter(Boolean) as string[]
+      );
+      const missingIds = requestedMemberIds.filter(
+        (studentId) => !foundIds.has(studentId)
+      );
+
+      if (missingIds.length > 0) {
+        setError(`No profiles found for Student ID: ${missingIds.join(", ")}.`);
+        return;
+      }
+
+      const { data: eventTeams } = await supabase
+        .from("teams")
+        .select("id, name")
+        .ilike("event", team.event || "");
+
+      const eventTeamRows = (eventTeams || []) as Pick<Team, "id" | "name">[];
+
+      if (eventTeamRows.length > 0) {
+        const { data: existingMemberships, error: membershipError } =
+          await supabase
+            .from("team_members")
+            .select("team_id, user_id, status")
+            .in(
+              "team_id",
+              eventTeamRows.map((eventTeam) => eventTeam.id)
+            )
+            .in(
+              "user_id",
+              invitedProfiles.map((member) => member.id)
+            )
+            .neq("status", "rejected");
+
+        if (membershipError) {
+          setError(membershipError.message);
+          return;
+        }
+
+        const takenMembership = (existingMemberships || [])[0] as
+          | Pick<TeamMember, "team_id" | "user_id" | "status">
+          | undefined;
+
+        if (takenMembership) {
+          const takenProfile = invitedProfiles.find(
+            (member) => member.id === takenMembership.user_id
+          );
+          setError(
+            `The member with Student ID ${
+              takenProfile?.student_id || "unknown"
+            } is already in a team for this event.`
+          );
+          return;
+        }
+      }
+
+      const { error: memberError } = await supabase.from("team_members").upsert(
+        invitedProfiles.map((member) => ({
+          team_id: team.id,
+          user_id: member.id,
+          status: "approved",
+        })),
+        { onConflict: "team_id,user_id" }
+      );
+
+      if (memberError) {
+        setError(memberError.message);
+        return;
+      }
+
+      const nextApprovedCount = approvedCount + invitedProfiles.length;
+
+      if (nextApprovedCount >= TEAM_MEMBER_LIMIT) {
+        const closed = await closeTeamAndRejectPending(team.id);
+        if (!closed) return;
+        setSuccess("Members added. Team is now full, so remaining applications were rejected.");
+      } else {
+        setSuccess("Members added to your team.");
+      }
+
+      setAddMemberInputs((current) => ({ ...current, [team.id]: "" }));
+      await loadOwnedTeams(profile.id);
+      await loadMemberTeams(profile.id);
+    } finally {
+      setTeamActionId("");
+    }
+  };
+
+  const startEditingTeam = (team: OwnedTeam) => {
+    setEditingTeamId(team.id);
+    setTeamEditValues((current) => ({
+      ...current,
+      [team.id]: {
+        name: team.name,
+        description: team.description || "",
+        neededSkills: team.needed_skills || "",
+        maxMembers: String(team.max_members ?? TEAM_MEMBER_LIMIT),
+        isOpenToMembers: team.is_open_to_members !== false,
+      },
+    }));
+    setError("");
+    setSuccess("");
+  };
+
+  const handleSaveTeamSettings = async (team: OwnedTeam) => {
+    if (!profile) return;
+
+    const values = teamEditValues[team.id];
+    const cleanName = values?.name.trim() || "";
+    const cleanDescription = values?.description.trim() || "";
+    const cleanNeededSkills = values?.isOpenToMembers
+      ? values.neededSkills.trim()
+      : "";
+    const nextMaxMembers = Math.min(
+      Math.max(Number(values?.maxMembers) || TEAM_MEMBER_LIMIT, 2),
+      TEAM_MEMBER_LIMIT
+    );
+    const approvedCount = team.members.filter(
+      (member) => member.status === "approved"
+    ).length;
+
+    if (!cleanName) {
+      setError("Team name is required.");
+      return;
+    }
+
+    if (!cleanDescription) {
+      setError("Team description is required.");
+      return;
+    }
+
+    if (values?.isOpenToMembers && !cleanNeededSkills) {
+      setError("Tell students what kind of member your team needs.");
+      return;
+    }
+
+    if (nextMaxMembers < approvedCount) {
+      setError(
+        `Max members cannot be less than your current ${approvedCount} approved member(s).`
+      );
+      return;
+    }
+
+    setTeamActionId(`edit-${team.id}`);
+    setError("");
+    setSuccess("");
+
+    try {
+      const shouldClose = nextMaxMembers >= TEAM_MEMBER_LIMIT && approvedCount >= TEAM_MEMBER_LIMIT;
+      const { error: updateError } = await supabase
+        .from("teams")
+        .update({
+          name: cleanName,
+          description: cleanDescription,
+          needed_skills: cleanNeededSkills || null,
+          max_members: nextMaxMembers,
+          is_open_to_members: shouldClose ? false : values?.isOpenToMembers ?? true,
+        })
+        .eq("id", team.id);
+
+      if (updateError) {
+        setError(updateError.message);
+        return;
+      }
+
+      if (shouldClose) {
+        const closed = await closeTeamAndRejectPending(team.id);
+        if (!closed) return;
+      }
+
+      setSuccess("Team settings updated.");
+      setEditingTeamId("");
+      await loadOwnedTeams(profile.id);
+    } finally {
+      setTeamActionId("");
+    }
+  };
+
+  const handleRemoveTeamMember = async (team: OwnedTeam, member: TeamMember) => {
+    if (!profile) return;
+
+    if (member.user_id === profile.id) {
+      setError("You cannot remove yourself as the team owner.");
+      return;
+    }
+
+    setTeamActionId(`remove-${member.id}`);
+    setError("");
+    setSuccess("");
+
+    try {
+      const { error: deleteError } = await supabase
+        .from("team_members")
+        .delete()
+        .eq("id", member.id);
+
+      if (deleteError) {
+        setError(deleteError.message);
+        return;
+      }
+
+      const approvedCountAfterRemove =
+        team.members.filter((teamMember) => teamMember.status === "approved")
+          .length - (member.status === "approved" ? 1 : 0);
+
+      if (approvedCountAfterRemove < TEAM_MEMBER_LIMIT) {
+        await supabase
+          .from("teams")
+          .update({ is_open_to_members: true })
+          .eq("id", team.id);
+      }
+
+      setSuccess("Member removed from the team.");
+      await loadOwnedTeams(profile.id);
+      await loadMemberTeams(profile.id);
+    } finally {
+      setTeamActionId("");
+    }
+  };
+
+  const handleCancelMembershipRequest = async (team: MemberTeam) => {
+    if (!profile) return;
+
+    setTeamActionId(`cancel-${team.membershipId}`);
+    setError("");
+    setSuccess("");
+
+    try {
+      const { error: cancelError } = await supabase
+        .from("team_members")
+        .delete()
+        .eq("id", team.membershipId);
+
+      if (cancelError) {
+        setError(cancelError.message);
+        return;
+      }
+
+      setSuccess(`Request to join ${team.name} was cancelled.`);
+      await loadMemberTeams(profile.id);
+      await loadOwnedTeams(profile.id);
+    } finally {
+      setTeamActionId("");
     }
   };
 
@@ -366,9 +949,11 @@ export default function ProfilePage() {
               <div className="flex flex-col items-center gap-3">
                 <div className="relative flex h-24 w-24 items-center justify-center overflow-hidden rounded-full bg-[#e8eefc] text-3xl font-bold text-[#1e3a8a]">
                   {avatarUrl ? (
-                    <img
+                    <Image
                       src={avatarUrl}
                       alt="Profile avatar"
+                      width={96}
+                      height={96}
                       className="h-full w-full object-cover"
                     />
                   ) : (
@@ -400,7 +985,7 @@ export default function ProfilePage() {
 
               <div className="flex-1">
                 <h2 className="text-2xl font-bold text-gray-900">
-                  {profile?.full_name || "Student User"}
+                  {fullName || profile?.full_name || "Student User"}
                 </h2>
                 <div className="mt-2 flex items-center gap-2">
                   {profile?.portal_verified && (
@@ -420,7 +1005,7 @@ export default function ProfilePage() {
                   )}
                 </div>
                 <p className="mt-1 text-base text-gray-700">
-                  {profile?.major || "Major not specified"}
+                  {majorState || profile?.major || "Major not specified"}
                 </p>
                 <p className="mt-2 text-sm text-gray-500">
                   Princess Sumaya University for Technology
@@ -486,7 +1071,7 @@ export default function ProfilePage() {
                   Student ID
                 </h3>
                 <p className="mt-2 text-base text-gray-900">
-                  {profile?.student_id || "Not specified"}
+                  {studentIdState || profile?.student_id || "Not specified"}
                 </p>
               </div>
 
@@ -635,6 +1220,508 @@ export default function ProfilePage() {
               </div>
             )}
           </div>
+
+          {!editing && memberTeams.length > 0 && (
+            <div className="w-full max-w-3xl rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
+              <div>
+                <h3 className="text-xl font-bold text-gray-900">Teams I&apos;m In</h3>
+                <p className="mt-1 text-sm text-gray-500">
+                  Teams you joined as a member.
+                </p>
+              </div>
+
+              <div className="mt-5 space-y-4">
+                {memberTeams.map((team) => {
+                  const isPending = team.membershipStatus === "pending";
+                  const isClosed = team.is_open_to_members === false;
+
+                  return (
+                    <article
+                      key={team.id}
+                      className="rounded-xl border border-gray-200 bg-white p-5"
+                    >
+                      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                        <div>
+                          <div className="flex flex-wrap items-center gap-2">
+                            <h4 className="text-lg font-bold text-[#1e3a8a]">
+                              {team.name}
+                            </h4>
+                            <span
+                              className={`rounded-full px-2 py-1 text-xs font-semibold ${
+                                isPending
+                                  ? "bg-yellow-50 text-yellow-700"
+                                  : "bg-green-50 text-green-700"
+                              }`}
+                            >
+                              {isPending ? "Pending" : "Member"}
+                            </span>
+                            {isClosed && (
+                              <span className="rounded-full bg-red-50 px-2 py-1 text-xs font-semibold text-red-600">
+                                Closed
+                              </span>
+                            )}
+                          </div>
+                          <p className="mt-1 text-sm text-gray-500">
+                            {team.event || "Event not set"}
+                          </p>
+                        </div>
+
+                        <p className="rounded-full bg-[#e8eefc] px-3 py-1 text-sm font-semibold text-[#1e3a8a]">
+                          Max {team.max_members ?? TEAM_MEMBER_LIMIT} members
+                        </p>
+                      </div>
+
+                      {isPending && (
+                        <button
+                          type="button"
+                          onClick={() => handleCancelMembershipRequest(team)}
+                          disabled={teamActionId === `cancel-${team.membershipId}`}
+                          className="mt-4 rounded-lg border border-red-200 px-4 py-2 text-sm font-semibold text-red-600 hover:bg-red-50 disabled:opacity-60"
+                        >
+                          {teamActionId === `cancel-${team.membershipId}`
+                            ? "Cancelling..."
+                            : "Cancel request"}
+                        </button>
+                      )}
+
+                      <p className="mt-4 text-sm leading-6 text-gray-700">
+                        {team.description || "No description added."}
+                      </p>
+
+                      <div className="mt-4">
+                        <p className="text-xs font-semibold uppercase text-gray-400">
+                          What the team needs
+                        </p>
+                        <p className="mt-1 text-sm font-medium text-gray-800">
+                          {team.needed_skills || "No more members needed."}
+                        </p>
+                      </div>
+                    </article>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+            {!editing && ownedTeams.length > 0 && (
+            <div className="w-full max-w-3xl rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+                  <div>
+                    <h3 className="text-xl font-bold text-gray-900">My Teams</h3>
+                    <p className="mt-1 text-sm text-gray-500">
+                      Review applicants and manage teams you own.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="mt-5 space-y-5">
+                  {ownedTeams.map((team) => {
+                    const approvedMembers = team.members.filter(
+                      (member) => member.status === "approved"
+                    );
+                    const pendingMembers = team.members.filter(
+                      (member) => member.status === "pending"
+                    );
+                    const isFull = approvedMembers.length >= TEAM_MEMBER_LIMIT;
+                    const isClosed = team.is_open_to_members === false || isFull;
+                    const isEditingTeam = editingTeamId === team.id;
+                    const editValues = teamEditValues[team.id] || {
+                      name: team.name,
+                      description: team.description || "",
+                      neededSkills: team.needed_skills || "",
+                      maxMembers: String(team.max_members ?? TEAM_MEMBER_LIMIT),
+                      isOpenToMembers: team.is_open_to_members !== false,
+                    };
+
+                    return (
+                      <article
+                        key={team.id}
+                        className="rounded-xl border border-gray-200 bg-white p-5"
+                      >
+                        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                          <div>
+                            <div className="flex flex-wrap items-center gap-2">
+                              {isEditingTeam ? (
+                                <input
+                                  value={editValues.name}
+                                  onChange={(e) =>
+                                    setTeamEditValues((current) => ({
+                                      ...current,
+                                      [team.id]: {
+                                        ...editValues,
+                                        name: e.target.value,
+                                      },
+                                    }))
+                                  }
+                                  className="rounded-lg border border-gray-300 px-3 py-2 text-sm font-semibold text-gray-900 outline-none focus:border-[#1e3a8a] focus:ring-2 focus:ring-[#1e3a8a]/10"
+                                />
+                              ) : (
+                                <h4 className="text-lg font-bold text-[#1e3a8a]">
+                                  {team.name}
+                                </h4>
+                              )}
+                              <span
+                                className={`rounded-full px-2 py-1 text-xs font-semibold ${
+                                  isClosed
+                                    ? "bg-red-50 text-red-600"
+                                    : "bg-green-50 text-green-700"
+                                }`}
+                              >
+                                {isClosed ? "Closed" : "Open"}
+                              </span>
+                            </div>
+                            <p className="mt-1 text-sm text-gray-500">
+                              {team.event || "Event not set"}
+                            </p>
+                          </div>
+
+                          <div className="flex flex-col items-start gap-2 sm:items-end">
+                            {isEditingTeam ? (
+                              <label className="text-xs font-semibold text-gray-500">
+                                Max members
+                                <input
+                                  type="number"
+                                  min={Math.max(approvedMembers.length, 2)}
+                                  max={TEAM_MEMBER_LIMIT}
+                                  value={editValues.maxMembers}
+                                  onChange={(e) =>
+                                    setTeamEditValues((current) => ({
+                                      ...current,
+                                      [team.id]: {
+                                        ...editValues,
+                                        maxMembers: e.target.value,
+                                      },
+                                    }))
+                                  }
+                                  className="mt-1 w-24 rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-900 outline-none focus:border-[#1e3a8a] focus:ring-2 focus:ring-[#1e3a8a]/10"
+                                />
+                              </label>
+                            ) : (
+                              <p className="rounded-full bg-[#e8eefc] px-3 py-1 text-sm font-semibold text-[#1e3a8a]">
+                                {approvedMembers.length} /{" "}
+                                {team.max_members ?? TEAM_MEMBER_LIMIT} members
+                              </p>
+                            )}
+
+                            <div className="flex gap-2">
+                              {isEditingTeam ? (
+                                <>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleSaveTeamSettings(team)}
+                                    disabled={teamActionId === `edit-${team.id}`}
+                                    className="rounded-lg bg-[#1e3a8a] px-3 py-2 text-xs font-semibold text-white disabled:opacity-60"
+                                  >
+                                    {teamActionId === `edit-${team.id}`
+                                      ? "Saving..."
+                                      : "Save"}
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => setEditingTeamId("")}
+                                    className="rounded-lg border border-gray-200 px-3 py-2 text-xs font-semibold text-gray-700 hover:bg-gray-50"
+                                  >
+                                    Cancel
+                                  </button>
+                                </>
+                              ) : (
+                                <button
+                                  type="button"
+                                  onClick={() => startEditingTeam(team)}
+                                  className="rounded-lg border border-[#1e3a8a] px-3 py-2 text-xs font-semibold text-[#1e3a8a] hover:bg-[#eef3ff]"
+                                >
+                                  Edit
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+
+                        {isEditingTeam ? (
+                          <div className="mt-4">
+                            <label className="text-xs font-semibold uppercase text-gray-400">
+                              Description
+                              <textarea
+                                value={editValues.description}
+                                onChange={(e) =>
+                                  setTeamEditValues((current) => ({
+                                    ...current,
+                                    [team.id]: {
+                                      ...editValues,
+                                      description: e.target.value,
+                                    },
+                                  }))
+                                }
+                                rows={3}
+                                className="mt-2 w-full rounded-xl border border-gray-300 px-4 py-3 text-sm normal-case text-gray-900 placeholder:text-gray-400 outline-none focus:border-[#1e3a8a] focus:ring-2 focus:ring-[#1e3a8a]/10"
+                              />
+                            </label>
+                          </div>
+                        ) : (
+                          <p className="mt-4 text-sm leading-6 text-gray-700">
+                            {team.description || "No description added."}
+                          </p>
+                        )}
+
+                        <div className="mt-4">
+                          <p className="text-xs font-semibold uppercase text-gray-400">
+                            What you need
+                          </p>
+                          {isEditingTeam ? (
+                            <div className="mt-2 space-y-3">
+                              <div className="grid grid-cols-2 gap-2">
+                                <label
+                                  className={`cursor-pointer rounded-lg border px-3 py-2 text-center text-sm font-medium ${
+                                    editValues.isOpenToMembers
+                                      ? "border-[#1e3a8a] bg-[#eef3ff] text-[#1e3a8a]"
+                                      : "border-gray-200 text-gray-600"
+                                  }`}
+                                >
+                                  <input
+                                    type="radio"
+                                    name={`open-${team.id}`}
+                                    checked={editValues.isOpenToMembers}
+                                    onChange={() =>
+                                      setTeamEditValues((current) => ({
+                                        ...current,
+                                        [team.id]: {
+                                          ...editValues,
+                                          isOpenToMembers: true,
+                                        },
+                                      }))
+                                    }
+                                    className="sr-only"
+                                  />
+                                  Need members
+                                </label>
+                                <label
+                                  className={`cursor-pointer rounded-lg border px-3 py-2 text-center text-sm font-medium ${
+                                    !editValues.isOpenToMembers
+                                      ? "border-[#1e3a8a] bg-[#eef3ff] text-[#1e3a8a]"
+                                      : "border-gray-200 text-gray-600"
+                                  }`}
+                                >
+                                  <input
+                                    type="radio"
+                                    name={`open-${team.id}`}
+                                    checked={!editValues.isOpenToMembers}
+                                    onChange={() =>
+                                      setTeamEditValues((current) => ({
+                                        ...current,
+                                        [team.id]: {
+                                          ...editValues,
+                                          isOpenToMembers: false,
+                                          neededSkills: "",
+                                        },
+                                      }))
+                                    }
+                                    className="sr-only"
+                                  />
+                                  No more members
+                                </label>
+                              </div>
+                              {editValues.isOpenToMembers && (
+                                <textarea
+                                  value={editValues.neededSkills}
+                                  onChange={(e) =>
+                                    setTeamEditValues((current) => ({
+                                      ...current,
+                                      [team.id]: {
+                                        ...editValues,
+                                        neededSkills: e.target.value,
+                                      },
+                                    }))
+                                  }
+                                  placeholder="What do you need in new members?"
+                                  rows={3}
+                                  className="w-full rounded-xl border border-gray-300 px-4 py-3 text-sm normal-case text-gray-900 placeholder:text-gray-400 outline-none focus:border-[#1e3a8a] focus:ring-2 focus:ring-[#1e3a8a]/10"
+                                />
+                              )}
+                            </div>
+                          ) : (
+                            <p className="mt-1 text-sm font-medium text-gray-800">
+                              {team.needed_skills || "No more members needed."}
+                            </p>
+                          )}
+                        </div>
+
+                        <div className="mt-5">
+                          <p className="text-sm font-semibold text-gray-900">
+                            Current members
+                          </p>
+                          <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                            {approvedMembers.map((member) => {
+                              const memberProfile = Array.isArray(member.profiles)
+                                ? member.profiles[0]
+                                : member.profiles;
+
+                              return (
+                                <div
+                                  key={member.id}
+                                  className="rounded-lg border border-gray-200 p-3"
+                                >
+                                  <div className="flex items-start justify-between gap-3">
+                                    <div>
+                                      <p className="text-sm font-semibold text-gray-900">
+                                        {memberProfile?.full_name || "Student"}
+                                      </p>
+                                      <p className="mt-1 text-xs text-gray-500">
+                                        {memberProfile?.student_id || "No Student ID"} -{" "}
+                                        {memberProfile?.major || "Major not added"}
+                                      </p>
+                                    </div>
+                                    {memberProfile?.id !== profile?.id && (
+                                      <div className="flex shrink-0 flex-col gap-2">
+                                        <Link
+                                          href={`/profile/${memberProfile?.id}`}
+                                          className="rounded-lg border border-[#1e3a8a] px-3 py-1.5 text-center text-xs font-semibold text-[#1e3a8a] hover:bg-[#eef3ff]"
+                                        >
+                                          View profile
+                                        </Link>
+                                        {isEditingTeam && (
+                                          <button
+                                            type="button"
+                                            onClick={() =>
+                                              handleRemoveTeamMember(team, member)
+                                            }
+                                            disabled={
+                                              teamActionId === `remove-${member.id}`
+                                            }
+                                            className="rounded-lg border border-red-200 px-3 py-1.5 text-xs font-semibold text-red-600 hover:bg-red-50 disabled:opacity-60"
+                                          >
+                                            {teamActionId === `remove-${member.id}`
+                                              ? "Removing..."
+                                              : "Remove"}
+                                          </button>
+                                        )}
+                                      </div>
+                                    )}
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+
+                        {isEditingTeam && !isClosed && (
+                          <div className="mt-5 rounded-xl border border-gray-200 p-4">
+                            <p className="text-sm font-semibold text-gray-900">
+                              Add members by Student ID
+                            </p>
+                            <p className="mt-1 text-xs leading-5 text-gray-500">
+                              The system will check that each student is not already
+                              in another team for this event.
+                            </p>
+                            <textarea
+                              value={addMemberInputs[team.id] || ""}
+                              onChange={(e) =>
+                                setAddMemberInputs((current) => ({
+                                  ...current,
+                                  [team.id]: e.target.value,
+                                }))
+                              }
+                              placeholder="e.g. 20210083, 20210049"
+                              rows={3}
+                              className="mt-3 w-full rounded-xl border border-gray-300 px-4 py-3 text-sm text-gray-900 placeholder:text-gray-400 outline-none focus:border-[#1e3a8a] focus:ring-2 focus:ring-[#1e3a8a]/10"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => handleAddMembersByStudentId(team)}
+                              disabled={teamActionId === `add-${team.id}`}
+                              className="mt-3 rounded-lg bg-[#1e3a8a] px-4 py-2 text-sm font-semibold text-white disabled:opacity-60"
+                            >
+                              {teamActionId === `add-${team.id}`
+                                ? "Adding..."
+                                : "Add members"}
+                            </button>
+                          </div>
+                        )}
+
+                        <div className="mt-5">
+                          <p className="text-sm font-semibold text-gray-900">
+                            Applied members
+                          </p>
+
+                          {pendingMembers.length > 0 && !isClosed ? (
+                            <div className="mt-3 space-y-3">
+                              {pendingMembers.map((member) => {
+                                const memberProfile = Array.isArray(member.profiles)
+                                  ? member.profiles[0]
+                                  : member.profiles;
+
+                                return (
+                                  <div
+                                    key={member.id}
+                                    className="rounded-lg border border-gray-200 p-4"
+                                  >
+                                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                                      <div>
+                                        <p className="text-sm font-semibold text-gray-900">
+                                          {memberProfile?.full_name || "Student"}
+                                        </p>
+                                        <p className="mt-1 text-xs text-gray-500">
+                                          {memberProfile?.student_id || "No Student ID"} -{" "}
+                                          {memberProfile?.major || "Major not added"}
+                                        </p>
+                                      </div>
+
+                                      <div className="flex gap-2">
+                                        {memberProfile?.id !== profile?.id && (
+                                          <Link
+                                            href={`/profile/${memberProfile?.id}`}
+                                            className="rounded-lg border border-[#1e3a8a] px-3 py-2 text-xs font-semibold text-[#1e3a8a] hover:bg-[#eef3ff]"
+                                          >
+                                            View profile
+                                          </Link>
+                                        )}
+                                        <button
+                                          type="button"
+                                          onClick={() =>
+                                            handleTeamApplication(
+                                              team,
+                                              member,
+                                              "approved"
+                                            )
+                                          }
+                                          disabled={teamActionId === member.id}
+                                          className="rounded-lg bg-[#1e3a8a] px-3 py-2 text-xs font-semibold text-white disabled:opacity-60"
+                                        >
+                                          Accept
+                                        </button>
+                                        <button
+                                          type="button"
+                                          onClick={() =>
+                                            handleTeamApplication(
+                                              team,
+                                              member,
+                                              "rejected"
+                                            )
+                                          }
+                                          disabled={teamActionId === member.id}
+                                          className="rounded-lg border border-red-200 px-3 py-2 text-xs font-semibold text-red-600 hover:bg-red-50 disabled:opacity-60"
+                                        >
+                                          Reject
+                                        </button>
+                                      </div>
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          ) : (
+                            <p className="mt-2 text-sm text-gray-500">
+                              {isClosed
+                                ? "This team is closed. Remaining applications were rejected."
+                                : "No pending applications."}
+                            </p>
+                          )}
+                        </div>
+                      </article>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
         </div>
       </section>
     </main>

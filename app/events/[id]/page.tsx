@@ -1,62 +1,933 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
-import { useParams } from "next/navigation";
+import { useEffect, useMemo, useState } from "react";
+import { useParams, useRouter } from "next/navigation";
 import AppNavbar from "../../../components/AppNavbar";
 import { supabase } from "../../../lib/supabase";
 
-type EventItem = {
+type EventRow = {
   id: string;
-  title: string;
-  description: string;
-  category: string;
-  location: string;
-  date: string;
+  title: string | null;
+  description: string | null;
+  category: string | null;
+  event_date?: string | null;
+  date?: string | null;
+  start_time?: string | null;
+  end_time?: string | null;
+  location?: string | null;
+  source_url?: string | null;
+  registered_count?: number | null;
+  max_capacity?: number | null;
+  approval_status?: string | null;
+  is_team_based?: boolean | null;
 };
+
+type Profile = {
+  id: string;
+  full_name: string | null;
+  email: string | null;
+  student_id: string | null;
+  major: string | null;
+  academic_year: string | null;
+};
+
+type Team = {
+  id: string;
+  name: string;
+  event: string | null;
+  description: string | null;
+  needed_skills: string | null;
+  max_members: number | null;
+  owner_id: string | null;
+  is_open_to_members?: boolean | null;
+};
+
+type TeamMember = {
+  id?: string;
+  team_id: string;
+  user_id: string;
+  status?: string | null;
+  profiles?: Profile | Profile[] | null;
+};
+
+type TeamWithMembers = Team & {
+  members: Profile[];
+  memberCount: number;
+  hasRequested: boolean;
+  currentUserMemberId: string | null;
+  currentUserMemberStatus: string | null;
+};
+
+const inputClass =
+  "w-full rounded-lg border border-slate-300 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-[#1e3a8a] focus:ring-2 focus:ring-[#1e3a8a]/10";
+
+const TEAM_MEMBER_LIMIT = 6;
 
 export default function EventDetailsPage() {
   const params = useParams();
-  const id = params.id as string;
+  const router = useRouter();
+  const id = Array.isArray(params.id) ? params.id[0] : params.id;
 
-  const [event, setEvent] = useState<EventItem | null>(null);
+  const [event, setEvent] = useState<EventRow | null>(null);
+  const [profile, setProfile] = useState<Profile | null>(null);
+  const [teams, setTeams] = useState<TeamWithMembers[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
+  const [selectedTeamId, setSelectedTeamId] = useState<string | null>(null);
+  const [currentEventTeamName, setCurrentEventTeamName] = useState("");
+
+  const [teamName, setTeamName] = useState("");
+  const [teamDescription, setTeamDescription] = useState("");
+  const [neededSkills, setNeededSkills] = useState("");
+  const [needsMoreMembers, setNeedsMoreMembers] = useState("yes");
+  const [memberStudentIds, setMemberStudentIds] = useState("");
+  const [maxMembers, setMaxMembers] = useState(String(TEAM_MEMBER_LIMIT));
+
+  const eventDate = event?.event_date ?? event?.date ?? null;
+  const isTeamBased =
+    Boolean(event?.is_team_based) ||
+    teams.length > 0 ||
+    /hackathon|competition|team|startup|pitch/i.test(
+      `${event?.title ?? ""} ${event?.category ?? ""}`
+    );
+
+  const selectedTeam = useMemo(
+    () => teams.find((team) => team.id === selectedTeamId) ?? teams[0] ?? null,
+    [selectedTeamId, teams]
+  );
+
+  const formatDate = (value: string | null) => {
+    if (!value) return "Date not set";
+    const parsed = new Date(`${value}T00:00:00`);
+    if (Number.isNaN(parsed.getTime())) return value;
+
+    return parsed.toLocaleDateString("en-GB", {
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+    });
+  };
+
+  const formatTime = (value?: string | null) => {
+    if (!value) return "";
+    const [hours, minutes] = value.split(":");
+    const date = new Date();
+    date.setHours(Number(hours), Number(minutes || 0), 0, 0);
+
+    return date.toLocaleTimeString("en-US", {
+      hour: "numeric",
+      minute: "2-digit",
+    });
+  };
+
+  const timeLabel =
+    event?.start_time && event?.end_time
+      ? `${formatTime(event.start_time)} - ${formatTime(event.end_time)}`
+      : formatTime(event?.start_time) || "Time not set";
+
+  const loadDetails = async () => {
+    if (!id) return;
+
+    setLoading(true);
+    setError("");
+
+    try {
+      const {
+        data: { user },
+        error: userError,
+      } = await supabase.auth.getUser();
+
+      if (userError || !user) {
+        router.push("/login");
+        return;
+      }
+
+      const [profileResult, eventResult] = await Promise.all([
+        supabase
+          .from("profiles")
+          .select("id, full_name, email, student_id, major, academic_year")
+          .eq("id", user.id)
+          .single(),
+        supabase.from("events").select("*").eq("id", id).single(),
+      ]);
+
+      if (profileResult.error) {
+        setError(profileResult.error.message);
+        return;
+      }
+
+      setProfile(profileResult.data as Profile);
+
+      if (eventResult.error || !eventResult.data) {
+        setError(eventResult.error?.message || "Event not found.");
+        return;
+      }
+
+      const loadedEvent = eventResult.data as EventRow;
+      setEvent(loadedEvent);
+
+      const title = loadedEvent.title ?? "";
+      const { data: teamData, error: teamError } = await supabase
+        .from("teams")
+        .select("*")
+        .ilike("event", title);
+
+      if (teamError) {
+        setTeams([]);
+        return;
+      }
+
+      const eventTeams = (teamData || []) as Team[];
+      const rawTeams = eventTeams.filter(
+        (team) => team.is_open_to_members !== false
+      );
+      let memberRows: TeamMember[] = [];
+
+      if (eventTeams.length > 0) {
+        const { data: membersData } = await supabase
+          .from("team_members")
+          .select(
+            "id, team_id, user_id, status, profiles(id, full_name, email, student_id, major, academic_year)"
+          )
+          .in(
+            "team_id",
+            eventTeams.map((team) => team.id)
+          );
+
+        memberRows = (membersData || []) as TeamMember[];
+      }
+
+      const currentUserMembership = memberRows.find(
+        (member) => member.user_id === user.id && member.status !== "rejected"
+      );
+      const currentUserTeam = eventTeams.find(
+        (team) => team.id === currentUserMembership?.team_id
+      );
+      setCurrentEventTeamName(currentUserTeam?.name ?? "");
+
+      const teamsWithMembers = rawTeams.map((team) => {
+        const members = memberRows
+          .filter(
+            (member) =>
+              member.team_id === team.id &&
+              (!member.status || member.status === "approved")
+          )
+          .map((member) =>
+            Array.isArray(member.profiles) ? member.profiles[0] : member.profiles
+          )
+          .filter(Boolean) as Profile[];
+
+        const requests = ((memberRows || []) as TeamMember[]).filter(
+          (member) => member.team_id === team.id && member.user_id === user.id
+        );
+        const currentUserRequest = requests[0];
+
+        return {
+          ...team,
+          max_members: Math.min(team.max_members ?? TEAM_MEMBER_LIMIT, TEAM_MEMBER_LIMIT),
+          members,
+          memberCount: members.length,
+          hasRequested: requests.length > 0,
+          currentUserMemberId: currentUserRequest?.id ?? null,
+          currentUserMemberStatus: currentUserRequest?.status ?? null,
+        };
+      });
+
+      setTeams(teamsWithMembers);
+      setSelectedTeamId(teamsWithMembers[0]?.id ?? null);
+    } catch (err) {
+      console.error("EVENT DETAILS ERROR:", err);
+      setError("Something went wrong while loading this event.");
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
-    const loadEvent = async () => {
-      const { data } = await supabase
-        .from("events")
-        .select("*")
-        .eq("id", id)
+    loadDetails();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id, router]);
+
+  const registerForEvent = async () => {
+    if (!event || !profile) return false;
+
+    const { error: registrationError } = await supabase
+      .from("event_registrations")
+      .upsert(
+        {
+          event_id: event.id,
+          user_id: profile.id,
+          full_name: profile.full_name,
+          email: profile.email,
+          student_id: profile.student_id,
+          major: profile.major,
+          academic_year: profile.academic_year,
+        },
+        { onConflict: "event_id,user_id" }
+      );
+
+    if (registrationError) {
+      setError(
+        `${registrationError.message}. Add the event_registrations table from the SQL I provided.`
+      );
+      return false;
+    }
+
+    return true;
+  };
+
+  const handleJoinEvent = async () => {
+    setSaving(true);
+    setError("");
+    setSuccess("");
+
+    try {
+      const registered = await registerForEvent();
+      if (!registered) return;
+
+      setSuccess("You are registered for this event.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleRequestJoinTeam = async (team: TeamWithMembers) => {
+    if (!profile || !event) return;
+
+    if (team.memberCount >= TEAM_MEMBER_LIMIT) {
+      setError("This team is already full.");
+      return;
+    }
+
+    if (currentEventTeamName) {
+      setError(`You are already in ${currentEventTeamName} for this event.`);
+      return;
+    }
+
+    setSaving(true);
+    setError("");
+    setSuccess("");
+
+    try {
+      const registered = await registerForEvent();
+      if (!registered) return;
+
+      const { error: requestError } = await supabase.from("team_members").upsert(
+        {
+          team_id: team.id,
+          user_id: profile.id,
+          status: "pending",
+        },
+        { onConflict: "team_id,user_id" }
+      );
+
+      if (requestError) {
+        setError(
+          `${requestError.message}. Add the team_members table from the SQL I provided.`
+        );
+        return;
+      }
+
+      setSuccess(`Request sent to ${team.name}.`);
+      await loadDetails();
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleCancelJoinRequest = async (team: TeamWithMembers) => {
+    if (!team.currentUserMemberId) return;
+
+    setSaving(true);
+    setError("");
+    setSuccess("");
+
+    try {
+      const { error: cancelError } = await supabase
+        .from("team_members")
+        .delete()
+        .eq("id", team.currentUserMemberId);
+
+      if (cancelError) {
+        setError(cancelError.message);
+        return;
+      }
+
+      setSuccess(`Request to join ${team.name} was cancelled.`);
+      await loadDetails();
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleCreateTeam = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    if (!event || !profile) return;
+
+    const cleanName = teamName.trim();
+    const cleanDescription = teamDescription.trim();
+    const isOpenToMembers = needsMoreMembers === "yes";
+    const cleanNeededSkills = isOpenToMembers ? neededSkills.trim() : "";
+    const requestedMemberIds = Array.from(
+      new Set(memberStudentIds.match(/\d{8}/g) ?? [])
+    ).filter((studentId) => studentId !== profile.student_id);
+    const selectedMaxMembers = Math.min(
+      Math.max(Number(maxMembers) || TEAM_MEMBER_LIMIT, 2),
+      TEAM_MEMBER_LIMIT
+    );
+    const memberSlots = selectedMaxMembers - 1;
+
+    if (!cleanName || !cleanDescription) {
+      setError("Team name and description are required.");
+      return;
+    }
+
+    if (currentEventTeamName) {
+      setError(`You are already in ${currentEventTeamName} for this event.`);
+      return;
+    }
+
+    if (isOpenToMembers && !cleanNeededSkills) {
+      setError("Tell students what kind of member your team needs.");
+      return;
+    }
+
+    if (requestedMemberIds.length > memberSlots) {
+      setError(`You can add up to ${memberSlots} other members for this team.`);
+      return;
+    }
+
+    setSaving(true);
+    setError("");
+    setSuccess("");
+
+    try {
+      const registered = await registerForEvent();
+      if (!registered) return;
+
+      let invitedProfiles: Profile[] = [];
+
+      if (requestedMemberIds.length > 0) {
+        const { data: matchedProfiles, error: profileLookupError } = await supabase
+          .from("profiles")
+          .select("id, full_name, email, student_id, major, academic_year")
+          .in("student_id", requestedMemberIds);
+
+        if (profileLookupError) {
+          setError(profileLookupError.message);
+          return;
+        }
+
+        invitedProfiles = (matchedProfiles || []) as Profile[];
+
+        const foundIds = new Set(
+          invitedProfiles
+            .map((member) => member.student_id)
+            .filter(Boolean) as string[]
+        );
+        const missingIds = requestedMemberIds.filter(
+          (studentId) => !foundIds.has(studentId)
+        );
+
+        if (missingIds.length > 0) {
+          setError(`No profiles found for Student ID: ${missingIds.join(", ")}.`);
+          return;
+        }
+
+        const { data: eventTeams } = await supabase
+          .from("teams")
+          .select("id, name")
+          .ilike("event", event.title ?? "");
+
+        const eventTeamRows = (eventTeams || []) as Pick<Team, "id" | "name">[];
+
+        if (eventTeamRows.length > 0) {
+          const { data: existingMemberships, error: membershipError } =
+            await supabase
+              .from("team_members")
+              .select("team_id, user_id, status")
+              .in(
+                "team_id",
+                eventTeamRows.map((team) => team.id)
+              )
+              .in(
+                "user_id",
+                invitedProfiles.map((member) => member.id)
+              )
+              .neq("status", "rejected");
+
+          if (membershipError) {
+            setError(membershipError.message);
+            return;
+          }
+
+          const takenMembership = (existingMemberships || [])[0] as
+            | Pick<TeamMember, "team_id" | "user_id" | "status">
+            | undefined;
+
+          if (takenMembership) {
+            const takenProfile = invitedProfiles.find(
+              (member) => member.id === takenMembership.user_id
+            );
+            setError(
+              `The member with Student ID ${
+                takenProfile?.student_id || "unknown"
+              } is already in a team for this event.`
+            );
+            return;
+          }
+        }
+      }
+
+      const { data: createdTeam, error: teamError } = await supabase
+        .from("teams")
+        .insert({
+          name: cleanName,
+          event: event.title,
+          description: cleanDescription,
+          needed_skills: cleanNeededSkills || null,
+          is_open_to_members: isOpenToMembers,
+          max_members: selectedMaxMembers,
+          owner_id: profile.id,
+        })
+        .select()
         .single();
 
-      setEvent(data);
-    };
+      if (teamError || !createdTeam) {
+        setError(teamError?.message || "Could not create team.");
+        return;
+      }
 
-    if (id) loadEvent();
-  }, [id]);
+      const memberRows = [
+        {
+          team_id: createdTeam.id,
+          user_id: profile.id,
+          status: "approved",
+        },
+        ...invitedProfiles.map((member) => ({
+          team_id: createdTeam.id,
+          user_id: member.id,
+          status: "approved",
+        })),
+      ];
+
+      const { error: memberError } = await supabase
+        .from("team_members")
+        .upsert(memberRows, { onConflict: "team_id,user_id" });
+
+      if (memberError) {
+        setError(
+          `Team created, but adding members failed: ${memberError.message}.`
+        );
+        return;
+      }
+
+      const addedCount = memberRows.length;
+      setSuccess(
+        addedCount === 1
+          ? "Team created and you were added as the owner."
+          : `Team created with ${addedCount} members. You are the owner.`
+      );
+      setTeamName("");
+      setTeamDescription("");
+      setNeededSkills("");
+      setNeedsMoreMembers("yes");
+      setMemberStudentIds("");
+      setMaxMembers(String(TEAM_MEMBER_LIMIT));
+      await loadDetails();
+    } finally {
+      setSaving(false);
+    }
+  };
 
   return (
-    <main className="min-h-screen bg-[#f3f5f9]">
+    <main className="min-h-screen bg-slate-50">
       <AppNavbar />
 
-      <section className="mx-auto max-w-4xl px-6 py-8">
-        <Link href="/events">← Back</Link>
+      <section className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
+        <Link
+          href="/events"
+          className="text-sm font-medium text-[#1e3a8a] hover:underline"
+        >
+          Back to events
+        </Link>
 
-        {event && (
-          <div className="bg-white p-8 rounded-xl mt-6">
-            <h1 className="text-3xl font-bold text-[#1e3a8a]">
-              {event.title}
-            </h1>
+        {loading && (
+          <div className="mt-6 rounded-lg border border-slate-200 bg-white p-6 text-sm text-slate-500 shadow-sm">
+            Loading event details...
+          </div>
+        )}
 
-            <p className="mt-4 text-gray-700">{event.description}</p>
+        {error && (
+          <div className="mt-6 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-600">
+            {error}
+          </div>
+        )}
 
-            <p className="mt-4 text-sm text-gray-500">
-              {event.location} • {event.date}
-            </p>
+        {success && (
+          <div className="mt-6 rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-700">
+            {success}
+          </div>
+        )}
 
-            <button className="mt-6 bg-[#1e3a8a] text-white px-5 py-2 rounded-lg">
-              Join Event
-            </button>
+        {!loading && event && (
+          <div className="mt-6 grid gap-6 lg:grid-cols-[1.15fr_0.85fr]">
+            <div className="space-y-6">
+              <article className="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700">
+                    {event.category || "Event"}
+                  </span>
+                  {isTeamBased && (
+                    <span className="rounded-full bg-[#e8eefc] px-3 py-1 text-xs font-semibold text-[#1e3a8a]">
+                      Team based
+                    </span>
+                  )}
+                </div>
+
+                <h1 className="mt-4 text-3xl font-bold text-slate-950">
+                  {event.title || "Untitled Event"}
+                </h1>
+
+                <p className="mt-4 leading-7 text-slate-600">
+                  {event.description || "No description available."}
+                </p>
+
+                <div className="mt-6 grid gap-3 sm:grid-cols-2">
+                  <div className="rounded-lg bg-slate-50 p-4">
+                    <p className="text-xs font-semibold uppercase text-slate-400">
+                      Date
+                    </p>
+                    <p className="mt-1 font-medium text-slate-800">
+                      {formatDate(eventDate)}
+                    </p>
+                  </div>
+                  <div className="rounded-lg bg-slate-50 p-4">
+                    <p className="text-xs font-semibold uppercase text-slate-400">
+                      Time
+                    </p>
+                    <p className="mt-1 font-medium text-slate-800">{timeLabel}</p>
+                  </div>
+                  <div className="rounded-lg bg-slate-50 p-4">
+                    <p className="text-xs font-semibold uppercase text-slate-400">
+                      Location
+                    </p>
+                    <p className="mt-1 font-medium text-slate-800">
+                      {event.location || "TBA"}
+                    </p>
+                  </div>
+                  <div className="rounded-lg bg-slate-50 p-4">
+                    <p className="text-xs font-semibold uppercase text-slate-400">
+                      Registration
+                    </p>
+                    <p className="mt-1 font-medium text-slate-800">
+                      {event.registered_count ?? 0}
+                      {event.max_capacity ? ` / ${event.max_capacity}` : ""}
+                    </p>
+                  </div>
+                </div>
+
+                {event.source_url && (
+                  <a
+                    href={event.source_url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="mt-6 inline-flex rounded-lg border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+                  >
+                    Open source link
+                  </a>
+                )}
+              </article>
+
+              {isTeamBased ? (
+                <section className="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
+                  <h2 className="text-xl font-bold text-slate-950">
+                    Available teams
+                  </h2>
+                  <p className="mt-2 text-sm text-slate-500">
+                    View members and request to join the team that fits you.
+                  </p>
+                  {currentEventTeamName && (
+                    <p className="mt-3 rounded-lg bg-[#eef3ff] px-4 py-3 text-sm font-medium text-[#1e3a8a]">
+                      You are already in {currentEventTeamName} for this event.
+                    </p>
+                  )}
+
+                  <div className="mt-5 grid gap-4 md:grid-cols-2">
+                    {teams.map((team) => (
+                      <button
+                        key={team.id}
+                        type="button"
+                        onClick={() => setSelectedTeamId(team.id)}
+                        className={`rounded-lg border p-4 text-left transition ${
+                          selectedTeam?.id === team.id
+                            ? "border-[#1e3a8a] bg-[#eef3ff]"
+                            : "border-slate-200 bg-white hover:border-[#1e3a8a]/40"
+                        }`}
+                      >
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <h3 className="font-bold text-slate-900">{team.name}</h3>
+                            <p className="mt-1 text-sm text-slate-500">
+                              {team.memberCount} / {TEAM_MEMBER_LIMIT} members
+                            </p>
+                          </div>
+                          {team.hasRequested && (
+                            <span className="rounded-full bg-green-50 px-2 py-1 text-xs font-semibold text-green-700">
+                              Requested
+                            </span>
+                          )}
+                        </div>
+                        <p className="mt-3 line-clamp-3 text-sm leading-6 text-slate-600">
+                          {team.description || "No description added."}
+                        </p>
+                        {team.memberCount >= TEAM_MEMBER_LIMIT && (
+                          <span className="mt-3 inline-flex rounded-full bg-red-50 px-2 py-1 text-xs font-semibold text-red-600">
+                            Full
+                          </span>
+                        )}
+                      </button>
+                    ))}
+                  </div>
+                </section>
+              ) : (
+                <section className="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
+                  <h2 className="text-xl font-bold text-slate-950">
+                    Join this event
+                  </h2>
+                  <p className="mt-2 text-sm leading-6 text-slate-500">
+                    Your name, email, student ID, major, and academic year will be
+                    copied from your profile into the event registration.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={handleJoinEvent}
+                    disabled={saving}
+                    className="mt-5 rounded-lg bg-[#1e3a8a] px-5 py-3 text-sm font-semibold text-white hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {saving ? "Joining..." : "Join event"}
+                  </button>
+                </section>
+              )}
+            </div>
+
+            <aside className="space-y-6">
+              <div className="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
+                <h2 className="text-lg font-bold text-slate-950">Your profile</h2>
+                <div className="mt-4 space-y-3 text-sm text-slate-950">
+                  <p>
+                    <span className="font-semibold text-slate-700">Name: </span>
+                    {profile?.full_name || "Not added"}
+                  </p>
+                  <p>
+                    <span className="font-semibold text-slate-700">Student ID: </span>
+                    {profile?.student_id || "Not added"}
+                  </p>
+                  <p>
+                    <span className="font-semibold text-slate-700">Major: </span>
+                    {profile?.major || "Not added"}
+                  </p>
+                  <p>
+                    <span className="font-semibold text-slate-700">Year: </span>
+                    {profile?.academic_year || "Not added"}
+                  </p>
+                </div>
+              </div>
+
+              {isTeamBased && selectedTeam && (
+                <div className="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
+                  <h2 className="text-lg font-bold text-slate-950">
+                    {selectedTeam.name}
+                  </h2>
+                  <p className="mt-3 text-sm leading-6 text-slate-600">
+                    {selectedTeam.description || "No description added."}
+                  </p>
+                  <div className="mt-4">
+                    <p className="text-xs font-semibold uppercase text-slate-400">
+                      Needed skills
+                    </p>
+                    <p className="mt-1 text-sm font-medium text-slate-700">
+                      {selectedTeam.needed_skills || "Not specified"}
+                    </p>
+                  </div>
+
+                  <div className="mt-5">
+                    <p className="text-xs font-semibold uppercase text-slate-400">
+                      Members
+                    </p>
+                    <div className="mt-3 space-y-2">
+                      {selectedTeam.members.length > 0 ? (
+                        selectedTeam.members.map((member) => (
+                          <div
+                            key={member.id}
+                            className="rounded-lg border border-slate-200 px-3 py-2"
+                          >
+                            <p className="text-sm font-semibold text-slate-800">
+                              {member.full_name || "Student"}
+                            </p>
+                            <p className="text-xs text-slate-500">
+                              {member.major || "Major not added"}
+                            </p>
+                          </div>
+                        ))
+                      ) : (
+                        <p className="text-sm text-slate-500">
+                          Members will appear after the team membership table is added.
+                        </p>
+                      )}
+                    </div>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() =>
+                      selectedTeam.currentUserMemberStatus === "pending"
+                        ? handleCancelJoinRequest(selectedTeam)
+                        : handleRequestJoinTeam(selectedTeam)
+                    }
+                    disabled={
+                      saving ||
+                      (selectedTeam.hasRequested &&
+                        selectedTeam.currentUserMemberStatus !== "pending") ||
+                      (Boolean(currentEventTeamName) &&
+                        selectedTeam.currentUserMemberStatus !== "pending") ||
+                      selectedTeam.memberCount >= TEAM_MEMBER_LIMIT
+                    }
+                    className="mt-5 w-full rounded-lg bg-[#1e3a8a] px-5 py-3 text-sm font-semibold text-white hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {selectedTeam.currentUserMemberStatus === "pending"
+                      ? saving
+                        ? "Cancelling..."
+                        : "Cancel request"
+                      : currentEventTeamName
+                      ? "Already in a team"
+                      : selectedTeam.memberCount >= TEAM_MEMBER_LIMIT
+                      ? "Team full"
+                      : selectedTeam.hasRequested
+                      ? "Request sent"
+                      : saving
+                      ? "Sending..."
+                      : "Request to join"}
+                  </button>
+                </div>
+              )}
+
+              {isTeamBased && (
+                <form
+                  onSubmit={handleCreateTeam}
+                  className="rounded-lg border border-slate-200 bg-white p-6 shadow-sm"
+                >
+                  <h2 className="text-lg font-bold text-slate-950">
+                    Create your own team
+                  </h2>
+                  <p className="mt-2 text-sm text-slate-500">
+                    You will be the team owner and first member.
+                  </p>
+                  <div className="mt-4 space-y-3">
+                    <input
+                      value={teamName}
+                      onChange={(e) => setTeamName(e.target.value)}
+                      placeholder="Team name"
+                      className={inputClass}
+                    />
+                    <textarea
+                      value={teamDescription}
+                      onChange={(e) => setTeamDescription(e.target.value)}
+                      placeholder="Team description"
+                      rows={4}
+                      className={inputClass}
+                    />
+                    <div className="rounded-lg border border-slate-200 p-3">
+                      <p className="text-sm font-semibold text-slate-700">
+                        Do you need more members?
+                      </p>
+                      <div className="mt-3 grid grid-cols-2 gap-2">
+                        <label
+                          className={`cursor-pointer rounded-lg border px-3 py-2 text-center text-sm font-medium ${
+                            needsMoreMembers === "yes"
+                              ? "border-[#1e3a8a] bg-[#eef3ff] text-[#1e3a8a]"
+                              : "border-slate-200 text-slate-600"
+                          }`}
+                        >
+                          <input
+                            type="radio"
+                            name="needsMoreMembers"
+                            value="yes"
+                            checked={needsMoreMembers === "yes"}
+                            onChange={(e) => setNeedsMoreMembers(e.target.value)}
+                            className="sr-only"
+                          />
+                          Yes
+                        </label>
+                        <label
+                          className={`cursor-pointer rounded-lg border px-3 py-2 text-center text-sm font-medium ${
+                            needsMoreMembers === "no"
+                              ? "border-[#1e3a8a] bg-[#eef3ff] text-[#1e3a8a]"
+                              : "border-slate-200 text-slate-600"
+                          }`}
+                        >
+                          <input
+                            type="radio"
+                            name="needsMoreMembers"
+                            value="no"
+                            checked={needsMoreMembers === "no"}
+                            onChange={(e) => {
+                              setNeedsMoreMembers(e.target.value);
+                              setNeededSkills("");
+                            }}
+                            className="sr-only"
+                          />
+                          No
+                        </label>
+                      </div>
+                    </div>
+                    {needsMoreMembers === "yes" && (
+                      <textarea
+                        value={neededSkills}
+                        onChange={(e) => setNeededSkills(e.target.value)}
+                        placeholder="What do you need in this member? e.g. frontend, backend, presentation"
+                        rows={3}
+                        className={inputClass}
+                      />
+                    )}
+                    <textarea
+                      value={memberStudentIds}
+                      onChange={(e) => setMemberStudentIds(e.target.value)}
+                      placeholder="Member Student IDs, e.g. 20210083, 20210049"
+                      rows={3}
+                      className={inputClass}
+                    />
+                    <p className="text-xs leading-5 text-slate-500">
+                      Add up to 5 other students. The system will match them by
+                      Student ID and add them to your team.
+                    </p>
+                    <input
+                      type="number"
+                      min="2"
+                      max={TEAM_MEMBER_LIMIT}
+                      value={maxMembers}
+                      onChange={(e) => setMaxMembers(e.target.value)}
+                      placeholder="Max members"
+                      className={inputClass}
+                    />
+                  </div>
+                  <button
+                    type="submit"
+                    disabled={saving || Boolean(currentEventTeamName)}
+                    className="mt-4 w-full rounded-lg bg-[#1e3a8a] px-5 py-3 text-sm font-semibold text-white hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {currentEventTeamName
+                      ? "Already in a team"
+                      : saving
+                      ? "Creating..."
+                      : "Create team"}
+                  </button>
+                </form>
+              )}
+            </aside>
           </div>
         )}
       </section>

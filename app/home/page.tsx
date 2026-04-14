@@ -29,6 +29,15 @@ type EventCard = {
   description: string;
 };
 
+type EventRow = {
+  id?: string | null;
+  title?: string | null;
+  category?: string | null;
+  event_date?: string | null;
+  location?: string | null;
+  description?: string | null;
+};
+
 const fallbackEvents: EventCard[] = [
   {
     id: "1",
@@ -94,11 +103,22 @@ export default function DashboardPage() {
           return;
         }
 
-        const { data: existingProfile, error: profileError } = await supabase
+        const profileQuery = supabase
           .from("profiles")
           .select("*")
           .eq("id", user.id)
           .single();
+
+        const eventsQuery = supabase
+          .from("events")
+          .select("id, title, category, event_date, location, description")
+          .order("event_date", { ascending: true })
+          .limit(12);
+
+        const [
+          { data: existingProfile, error: profileError },
+          { data: eventsData, error: eventsError },
+        ] = await Promise.all([profileQuery, eventsQuery]);
 
         if (profileError && profileError.code !== "PGRST116") {
           setError(profileError.message);
@@ -140,19 +160,13 @@ export default function DashboardPage() {
           setProfile(insertedProfile ?? newProfile);
         }
 
-        const { data: eventsData, error: eventsError } = await supabase
-          .from("events")
-          .select("*")
-          .order("event_date", { ascending: true })
-          .limit(12);
-
         if (eventsError || !eventsData || eventsData.length === 0) {
           setEvents(fallbackEvents);
           return;
         }
 
-        const mappedEvents: EventCard[] = eventsData.map(
-          (event: any, index: number) => ({
+        const mappedEvents: EventCard[] = (eventsData as EventRow[]).map(
+          (event, index) => ({
             id: event.id ?? String(index),
             title: event.title ?? "Untitled Event",
             category: event.category ?? "Event",

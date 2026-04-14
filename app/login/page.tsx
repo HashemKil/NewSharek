@@ -20,20 +20,38 @@ export default function LoginPage() {
     setLoading(true);
 
     try {
-      // Look up the user's email by student ID from the profiles table
-      const { data: profile, error: profileError } = await supabase
-        .from("profiles")
-        .select("email")
-        .eq("student_id", studentId)
-        .single();
+      const cleanStudentId = studentId.trim();
 
-      if (profileError || !profile?.email) {
+      // Look up the user's email by student ID. The RPC works even when
+      // profiles are hidden by RLS, if the database function is installed.
+      const { data: rpcProfile } = await supabase
+        .rpc("get_email_by_student_id", { p_student_id: cleanStudentId })
+        .maybeSingle();
+
+      const rpcEmail =
+        rpcProfile && typeof rpcProfile === "object" && "email" in rpcProfile
+          ? String(rpcProfile.email)
+          : "";
+
+      let email = rpcEmail;
+
+      if (!email) {
+        const { data: profile } = await supabase
+          .from("profiles")
+          .select("email")
+          .eq("student_id", cleanStudentId)
+          .maybeSingle();
+
+        email = profile?.email;
+      }
+
+      if (!email) {
         setError("No account found for that Student ID.");
         return;
       }
 
       const { error } = await supabase.auth.signInWithPassword({
-        email: profile.email,
+        email,
         password,
       });
 
@@ -83,6 +101,7 @@ export default function LoginPage() {
               placeholder="Student ID"
               value={studentId}
               onChange={(e) => setStudentId(e.target.value)}
+              inputMode="numeric"
               required
               className={inputClass}
             />
