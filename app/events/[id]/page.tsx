@@ -195,7 +195,7 @@ export default function EventDetailsPage() {
 
   const getStatusBadge = (status: EventStatus) => {
     void status;
-    return "border-green-200 bg-green-50 text-green-700";
+    return "border-sky-200 bg-sky-50 text-sky-700";
   };
 
   const eventTypeBadgeClass =

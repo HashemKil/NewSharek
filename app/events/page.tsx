@@ -593,7 +593,7 @@ export default function EventsPage() {
 
   const getStatusBadge = (status: string) => {
     void status;
-    return "border-green-200 bg-green-50 text-green-700";
+    return "border-sky-200 bg-sky-50 text-sky-700";
   };
 
   const eventTypeBadgeClass =
@@ -607,8 +607,8 @@ export default function EventsPage() {
     const base = "rounded-full border px-4 py-2 text-sm font-semibold transition";
 
     return active
-      ? `${base} border-green-700 bg-green-700 text-white shadow-sm`
-      : `${base} border-green-200 bg-green-50 text-green-700 hover:bg-green-100`;
+      ? `${base} border-sky-600 bg-sky-500 text-white shadow-sm`
+      : `${base} border-sky-200 bg-sky-50 text-sky-700 hover:bg-sky-100`;
   };
 
   const getTypeFilterClass = (type: (typeof EVENT_TYPE_TABS)[number], active: boolean) => {
@@ -908,7 +908,7 @@ export default function EventsPage() {
                             </span>
 
                             {isJoined && (
-                              <span className="rounded-full bg-green-50 px-3 py-1 text-xs font-semibold text-green-700">
+                              <span className="rounded-full border border-sky-200 bg-sky-50 px-3 py-1 text-xs font-semibold text-sky-700">
                                 Joined
                               </span>
                             )}
@@ -996,7 +996,7 @@ export default function EventsPage() {
                               event.status === "completed"
                                 ? "cursor-not-allowed border border-slate-200 bg-slate-100 text-slate-500"
                                 : isJoined
-                                ? "cursor-not-allowed bg-green-50 text-green-700"
+                                ? "cursor-not-allowed bg-sky-50 text-sky-700"
                                 : event.isFull && !isJoined
                                 ? "cursor-not-allowed bg-slate-200 text-slate-500"
                                 : "bg-[#1e3a8a] text-white hover:opacity-90"
