@@ -27,7 +27,6 @@ type EventRow = {
   title: string | null;
   category: string | null;
   club_id: string | null;
-  date?: string | null;
   event_date?: string | null;
 };
 
@@ -84,7 +83,7 @@ export default function ClubsPage() {
           supabase.from("clubs").select("*"),
           supabase
             .from("events")
-            .select("id, title, category, club_id, date, event_date"),
+            .select("id, title, category, club_id, event_date"),
         ]);
 
         if (clubsResult.error) {
@@ -100,8 +99,8 @@ export default function ClubsPage() {
         }
 
         const eventRows = ((eventsResult.data || []) as EventRow[]).sort((a, b) => {
-          const aDate = a.event_date ?? a.date ?? "";
-          const bDate = b.event_date ?? b.date ?? "";
+          const aDate = a.event_date ?? "";
+          const bDate = b.event_date ?? "";
           return aDate.localeCompare(bDate);
         });
 
@@ -305,7 +304,7 @@ export default function ClubsPage() {
                                   {event.title || "Untitled event"}
                                 </span>
                                 <span className="mt-1 block text-xs text-slate-500">
-                                  {formatDate(event.event_date ?? event.date)}
+                                  {formatDate(event.event_date)}
                                 </span>
                               </Link>
                             ))}
