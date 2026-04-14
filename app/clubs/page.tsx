@@ -36,8 +36,71 @@ type Club = ClubRow & {
   upcomingEvents: EventRow[];
 };
 
+const CLUB_FILTERS = [
+  "All Clubs",
+  "Technical",
+  "Business",
+  "Community",
+  "Arts & Media",
+  "Sports",
+] as const;
+
 const getClubName = (club: ClubRow) =>
   club.name?.trim() || club.title?.trim() || "Untitled club";
+
+const getClubGroup = (club: Club) => {
+  const text = [
+    club.displayName,
+    club.category || "",
+    club.description || "",
+  ]
+    .join(" ")
+    .toLowerCase();
+
+  if (
+    [
+      "tech",
+      "computer",
+      "software",
+      "cyber",
+      "security",
+      "ai",
+      "data",
+      "engineering",
+      "robot",
+      "coding",
+      "programming",
+    ].some((keyword) => text.includes(keyword))
+  ) {
+    return "Technical";
+  }
+
+  if (
+    ["business", "entrepreneur", "startup", "marketing", "finance", "accounting"].some(
+      (keyword) => text.includes(keyword)
+    )
+  ) {
+    return "Business";
+  }
+
+  if (
+    ["media", "design", "art", "music", "film", "photo", "content"].some((keyword) =>
+      text.includes(keyword)
+    )
+  ) {
+    return "Arts & Media";
+  }
+
+  if (
+    ["sport", "football", "basketball", "fitness", "chess", "gaming"].some((keyword) =>
+      text.includes(keyword)
+    )
+  ) {
+    return "Sports";
+  }
+
+  return "Community";
+};
 
 const formatDate = (value?: string | null) => {
   if (!value) return "Date not set";
@@ -132,14 +195,6 @@ export default function ClubsPage() {
     loadClubs();
   }, [router]);
 
-  const categoryOptions = useMemo(() => {
-    const categories = Array.from(
-      new Set(clubs.map((club) => club.category).filter(Boolean))
-    ).sort() as string[];
-
-    return ["All Clubs", ...categories];
-  }, [clubs]);
-
   const filteredClubs = useMemo(() => {
     const query = search.trim().toLowerCase();
 
@@ -152,7 +207,7 @@ export default function ClubsPage() {
         (club.location || "").toLowerCase().includes(query);
 
       const matchesCategory =
-        selectedCategory === "All Clubs" || club.category === selectedCategory;
+        selectedCategory === "All Clubs" || getClubGroup(club) === selectedCategory;
 
       return matchesSearch && matchesCategory;
     });
@@ -199,7 +254,7 @@ export default function ClubsPage() {
           </div>
 
           <div className="mt-5 flex flex-wrap gap-2">
-            {categoryOptions.map((category) => {
+            {CLUB_FILTERS.map((category) => {
               const active = selectedCategory === category;
 
               return (
