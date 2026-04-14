@@ -21,6 +21,7 @@ type EventRow = {
   max_capacity?: number | null;
   approval_status?: string | null;
   is_team_based?: boolean | null;
+  is_university_event?: boolean | null;
 };
 
 type Profile = {
@@ -87,12 +88,14 @@ export default function EventDetailsPage() {
   const [maxMembers, setMaxMembers] = useState(String(TEAM_MEMBER_LIMIT));
 
   const eventDate = event?.event_date ?? event?.date ?? null;
-  const isTeamBased =
-    Boolean(event?.is_team_based) ||
-    teams.length > 0 ||
-    /hackathon|competition|team|startup|pitch/i.test(
-      `${event?.title ?? ""} ${event?.category ?? ""}`
-    );
+  const isTeamBased = Boolean(event?.is_team_based);
+  const eventTypeLabel = event?.is_university_event
+    ? isTeamBased
+      ? "University Team"
+      : "University Solo"
+    : isTeamBased
+    ? "Student Team"
+    : "Student Solo";
 
   const selectedTeam = useMemo(
     () => teams.find((team) => team.id === selectedTeamId) ?? teams[0] ?? null,
@@ -510,7 +513,7 @@ export default function EventDetailsPage() {
         ...invitedProfiles.map((member) => ({
           team_id: createdTeam.id,
           user_id: member.id,
-          status: "approved",
+          status: "invited",
         })),
       ];
 
@@ -529,7 +532,7 @@ export default function EventDetailsPage() {
       setSuccess(
         addedCount === 1
           ? "Team created and you were added as the owner."
-          : `Team created with ${addedCount} members. You are the owner.`
+          : `Team created. Invites were sent to ${addedCount - 1} student(s). You are the owner.`
       );
       setTeamName("");
       setTeamDescription("");
@@ -586,6 +589,9 @@ export default function EventDetailsPage() {
                       Team based
                     </span>
                   )}
+                  <span className="rounded-full bg-green-50 px-3 py-1 text-xs font-semibold text-green-700">
+                    {eventTypeLabel}
+                  </span>
                 </div>
 
                 <h1 className="mt-4 text-3xl font-bold text-slate-950">

@@ -20,6 +20,8 @@ type EventRow = {
   registered_count?: number | null;
   max_capacity?: number | null;
   computed_status?: "upcoming" | "ongoing" | "completed" | null;
+  is_team_based?: boolean | null;
+  is_university_event?: boolean | null;
 };
 
 type EventItem = {
@@ -36,6 +38,8 @@ type EventItem = {
   registered_count: number;
   max_capacity: number | null;
   computed_status?: "upcoming" | "ongoing" | "completed";
+  is_team_based: boolean;
+  is_university_event: boolean;
 };
 
 type NormalizedEvent = EventItem & {
@@ -108,7 +112,16 @@ export default function EventsPage() {
       registered_count: row.registered_count ?? 0,
       max_capacity: row.max_capacity ?? null,
       computed_status: row.computed_status ?? undefined,
+      is_team_based: Boolean(row.is_team_based),
+      is_university_event: Boolean(row.is_university_event),
     };
+  };
+
+  const getEventTypeLabel = (event: Pick<EventItem, "is_team_based" | "is_university_event">) => {
+    if (event.is_university_event && event.is_team_based) return "University Team";
+    if (event.is_university_event) return "University Solo";
+    if (event.is_team_based) return "Student Team";
+    return "Student Solo";
   };
 
   useEffect(() => {
@@ -756,6 +769,9 @@ export default function EventsPage() {
                           <div className="flex flex-wrap items-center gap-2">
                             <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700">
                               {event.category}
+                            </span>
+                            <span className="rounded-full bg-[#eef3ff] px-3 py-1 text-xs font-semibold text-[#1e3a8a]">
+                              {getEventTypeLabel(event)}
                             </span>
 
                             <span

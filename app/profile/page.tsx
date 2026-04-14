@@ -38,7 +38,7 @@ type TeamMember = {
   id: string;
   team_id: string;
   user_id: string;
-  status: "pending" | "approved" | "rejected";
+  status: "pending" | "approved" | "rejected" | "invited";
   profiles?: Profile | Profile[] | null;
 };
 
@@ -52,7 +52,7 @@ type TeamMembership = TeamMember & {
 
 type MemberTeam = Team & {
   membershipId: string;
-  membershipStatus: "pending" | "approved" | "rejected";
+  membershipStatus: "pending" | "approved" | "rejected" | "invited";
 };
 
 const TEAM_MEMBER_LIMIT = 6;
@@ -164,8 +164,10 @@ export default function ProfilePage() {
       const approvedCount = team.members.filter(
         (member) => member.status === "approved"
       ).length;
-      const hasPending = team.members.some((member) => member.status === "pending");
-      return approvedCount >= TEAM_MEMBER_LIMIT && (team.is_open_to_members !== false || hasPending);
+      const hasWaiting = team.members.some(
+        (member) => member.status === "pending" || member.status === "invited"
+      );
+      return approvedCount >= TEAM_MEMBER_LIMIT && (team.is_open_to_members !== false || hasWaiting);
     });
 
     const fullTeamIds = new Set(fullTeams.map((team) => team.id));
@@ -176,9 +178,9 @@ export default function ProfilePage() {
         ...team,
         is_open_to_members: false,
         members: team.members.map((member) =>
-          member.status === "pending"
-            ? { ...member, status: "rejected" as const }
-            : member
+            member.status === "pending" || member.status === "invited"
+              ? { ...member, status: "rejected" as const }
+              : member
         ),
       };
     });
@@ -197,7 +199,7 @@ export default function ProfilePage() {
             .from("team_members")
             .update({ status: "rejected" })
             .eq("team_id", team.id)
-            .eq("status", "pending");
+            .in("status", ["pending", "invited"]);
         })
       ).catch((err) => {
         console.warn("Could not close full teams:", err);
@@ -276,7 +278,6 @@ export default function ProfilePage() {
         setSkillsInput(data.skills?.join(", ") || "");
         setInterests(data.interests || []);
         setAvatarUrl(data.avatar_url || "");
-        await Promise.all([loadOwnedTeams(user.id), loadMemberTeams(user.id)]);
 
         setLoading(false);
 
@@ -500,7 +501,7 @@ export default function ProfilePage() {
       .from("team_members")
       .update({ status: "rejected" })
       .eq("team_id", teamId)
-      .eq("status", "pending");
+      .in("status", ["pending", "invited"]);
 
     if (rejectError) {
       setError(rejectError.message);
@@ -609,10 +610,10 @@ export default function ProfilePage() {
       return;
     }
 
-    const approvedCount = team.members.filter(
-      (member) => member.status === "approved"
+    const activeCount = team.members.filter(
+      (member) => member.status !== "rejected"
     ).length;
-    const remainingSlots = TEAM_MEMBER_LIMIT - approvedCount;
+    const remainingSlots = TEAM_MEMBER_LIMIT - activeCount;
 
     if (remainingSlots <= 0) {
       const closed = await closeTeamAndRejectPending(team.id);
@@ -706,7 +707,7 @@ export default function ProfilePage() {
         invitedProfiles.map((member) => ({
           team_id: team.id,
           user_id: member.id,
-          status: "approved",
+          status: "invited",
         })),
         { onConflict: "team_id,user_id" }
       );
@@ -716,14 +717,14 @@ export default function ProfilePage() {
         return;
       }
 
-      const nextApprovedCount = approvedCount + invitedProfiles.length;
+      const nextActiveCount = activeCount + invitedProfiles.length;
 
-      if (nextApprovedCount >= TEAM_MEMBER_LIMIT) {
+      if (nextActiveCount >= TEAM_MEMBER_LIMIT) {
         const closed = await closeTeamAndRejectPending(team.id);
         if (!closed) return;
-        setSuccess("Members added. Team is now full, so remaining applications were rejected.");
+        setSuccess("Invites sent. Team is now full, so remaining applications were rejected.");
       } else {
-        setSuccess("Members added to your team.");
+        setSuccess("Invites sent to the selected students.");
       }
 
       setAddMemberInputs((current) => ({ ...current, [team.id]: "" }));
@@ -885,6 +886,39 @@ export default function ProfilePage() {
       }
 
       setSuccess(`Request to join ${team.name} was cancelled.`);
+      await loadMemberTeams(profile.id);
+      await loadOwnedTeams(profile.id);
+    } finally {
+      setTeamActionId("");
+    }
+  };
+
+  const handleTeamInviteResponse = async (
+    team: MemberTeam,
+    status: "approved" | "rejected"
+  ) => {
+    if (!profile) return;
+
+    setTeamActionId(`invite-${team.membershipId}`);
+    setError("");
+    setSuccess("");
+
+    try {
+      const { error: updateError } = await supabase
+        .from("team_members")
+        .update({ status })
+        .eq("id", team.membershipId);
+
+      if (updateError) {
+        setError(updateError.message);
+        return;
+      }
+
+      setSuccess(
+        status === "approved"
+          ? `You joined ${team.name}.`
+          : `Invite from ${team.name} was rejected.`
+      );
       await loadMemberTeams(profile.id);
       await loadOwnedTeams(profile.id);
     } finally {
@@ -1219,9 +1253,20 @@ export default function ProfilePage() {
                 </button>
               </div>
             )}
+
+            {!editing && (
+              <div className="mt-8 border-t border-gray-200 pt-6">
+                <Link
+                  href="/teams"
+                  className="inline-flex rounded-xl bg-[#1e3a8a] px-4 py-2 text-sm font-semibold text-white transition hover:opacity-90"
+                >
+                  Manage teams
+                </Link>
+              </div>
+            )}
           </div>
 
-          {!editing && memberTeams.length > 0 && (
+          {false && !editing && memberTeams.length > 0 && (
             <div className="w-full max-w-3xl rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
               <div>
                 <h3 className="text-xl font-bold text-gray-900">Teams I&apos;m In</h3>
@@ -1233,6 +1278,7 @@ export default function ProfilePage() {
               <div className="mt-5 space-y-4">
                 {memberTeams.map((team) => {
                   const isPending = team.membershipStatus === "pending";
+                  const isInvited = team.membershipStatus === "invited";
                   const isClosed = team.is_open_to_members === false;
 
                   return (
@@ -1248,12 +1294,18 @@ export default function ProfilePage() {
                             </h4>
                             <span
                               className={`rounded-full px-2 py-1 text-xs font-semibold ${
-                                isPending
+                                isInvited
+                                  ? "bg-blue-50 text-blue-700"
+                                  : isPending
                                   ? "bg-yellow-50 text-yellow-700"
                                   : "bg-green-50 text-green-700"
                               }`}
                             >
-                              {isPending ? "Pending" : "Member"}
+                              {isInvited
+                                ? "Invited"
+                                : isPending
+                                ? "Pending"
+                                : "Member"}
                             </span>
                             {isClosed && (
                               <span className="rounded-full bg-red-50 px-2 py-1 text-xs font-semibold text-red-600">
@@ -1270,6 +1322,33 @@ export default function ProfilePage() {
                           Max {team.max_members ?? TEAM_MEMBER_LIMIT} members
                         </p>
                       </div>
+
+                      {isInvited && (
+                        <div className="mt-4 flex flex-wrap gap-2">
+                          <button
+                            type="button"
+                            onClick={() =>
+                              handleTeamInviteResponse(team, "approved")
+                            }
+                            disabled={teamActionId === `invite-${team.membershipId}`}
+                            className="rounded-lg bg-[#1e3a8a] px-4 py-2 text-sm font-semibold text-white disabled:opacity-60"
+                          >
+                            {teamActionId === `invite-${team.membershipId}`
+                              ? "Saving..."
+                              : "Accept invite"}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              handleTeamInviteResponse(team, "rejected")
+                            }
+                            disabled={teamActionId === `invite-${team.membershipId}`}
+                            className="rounded-lg border border-red-200 px-4 py-2 text-sm font-semibold text-red-600 hover:bg-red-50 disabled:opacity-60"
+                          >
+                            Reject invite
+                          </button>
+                        </div>
+                      )}
 
                       {isPending && (
                         <button
@@ -1303,7 +1382,7 @@ export default function ProfilePage() {
             </div>
           )}
 
-            {!editing && ownedTeams.length > 0 && (
+            {false && !editing && ownedTeams.length > 0 && (
             <div className="w-full max-w-3xl rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
                 <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
                   <div>
@@ -1321,6 +1400,9 @@ export default function ProfilePage() {
                     );
                     const pendingMembers = team.members.filter(
                       (member) => member.status === "pending"
+                    );
+                    const invitedMembers = team.members.filter(
+                      (member) => member.status === "invited"
                     );
                     const isFull = approvedMembers.length >= TEAM_MEMBER_LIMIT;
                     const isClosed = team.is_open_to_members === false || isFull;
@@ -1544,6 +1626,39 @@ export default function ProfilePage() {
                             </p>
                           )}
                         </div>
+
+                        {invitedMembers.length > 0 && (
+                          <div className="mt-5">
+                            <p className="text-sm font-semibold text-gray-900">
+                              Invited members
+                            </p>
+                            <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                              {invitedMembers.map((member) => {
+                                const memberProfile = Array.isArray(member.profiles)
+                                  ? member.profiles[0]
+                                  : member.profiles;
+
+                                return (
+                                  <div
+                                    key={member.id}
+                                    className="rounded-lg border border-blue-100 bg-blue-50 p-3"
+                                  >
+                                    <p className="text-sm font-semibold text-gray-900">
+                                      {memberProfile?.full_name || "Student"}
+                                    </p>
+                                    <p className="mt-1 text-xs text-gray-600">
+                                      {memberProfile?.student_id || "No Student ID"} -{" "}
+                                      {memberProfile?.major || "Major not added"}
+                                    </p>
+                                    <p className="mt-2 text-xs font-semibold text-blue-700">
+                                      Waiting for approval
+                                    </p>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        )}
 
                         <div className="mt-5">
                           <p className="text-sm font-semibold text-gray-900">

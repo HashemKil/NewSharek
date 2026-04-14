@@ -1,6 +1,9 @@
 alter table public.events
 add column if not exists is_team_based boolean not null default false;
 
+alter table public.events
+add column if not exists is_university_event boolean not null default false;
+
 alter table public.teams
 add column if not exists is_open_to_members boolean not null default true;
 
@@ -35,10 +38,17 @@ create table if not exists public.team_members (
   id uuid primary key default gen_random_uuid(),
   team_id uuid not null references public.teams(id) on delete cascade,
   user_id uuid not null references public.profiles(id) on delete cascade,
-  status text not null default 'pending' check (status in ('pending', 'approved', 'rejected')),
+  status text not null default 'pending' check (status in ('pending', 'approved', 'rejected', 'invited')),
   created_at timestamptz not null default now(),
   unique (team_id, user_id)
 );
+
+alter table public.team_members
+drop constraint if exists team_members_status_check;
+
+alter table public.team_members
+add constraint team_members_status_check
+check (status in ('pending', 'approved', 'rejected', 'invited'));
 
 alter table public.event_registrations enable row level security;
 alter table public.team_members enable row level security;
