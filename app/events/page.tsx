@@ -63,6 +63,8 @@ type TeamMembershipRow = {
   teams?: { event?: string | null } | { event?: string | null }[] | null;
 };
 
+type EventTypeRow = Pick<EventRow, "id" | "is_team_based" | "is_university_event">;
+
 const STATUS_TABS = [
   "All Statuses",
   "Completed",
@@ -153,7 +155,30 @@ export default function EventsPage() {
         let loadedEvents: EventItem[] = [];
 
         if (!viewError && viewData) {
-          loadedEvents = (viewData as EventRow[]).map(mapRowToEvent);
+          const eventIds = (viewData as EventRow[]).map((event) => event.id);
+          const { data: typeData } = await supabase
+            .from("events")
+            .select("id, is_team_based, is_university_event")
+            .in("id", eventIds);
+
+          const typeByEventId = new Map(
+            ((typeData || []) as EventTypeRow[]).map((event) => [
+              event.id,
+              event,
+            ])
+          );
+
+          loadedEvents = (viewData as EventRow[]).map((event) =>
+            mapRowToEvent({
+              ...event,
+              is_team_based:
+                typeByEventId.get(event.id)?.is_team_based ??
+                event.is_team_based,
+              is_university_event:
+                typeByEventId.get(event.id)?.is_university_event ??
+                event.is_university_event,
+            })
+          );
           setEvents(loadedEvents);
           setLoading(false);
           loadJoinedEvents(loadedEvents);
