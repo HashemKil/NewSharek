@@ -604,6 +604,58 @@ export default function EventsPage() {
   const eventTypeBadgeClass =
     "rounded-full border border-[#c7d5fb] bg-[#eef3ff] px-3 py-1 text-xs font-semibold text-[#1e3a8a]";
 
+  const getStatusFilterClass = (
+    tab: (typeof STATUS_TABS)[number],
+    active: boolean
+  ) => {
+    const base = "rounded-full border px-4 py-2 text-sm font-medium transition";
+    const selected = active ? "shadow-sm ring-2 ring-offset-1" : "opacity-80 hover:opacity-100";
+
+    if (tab === "ongoing" || tab === "Joined") {
+      return `${base} border-green-200 bg-green-50 text-green-700 ${selected} ${
+        active ? "ring-green-200" : ""
+      }`;
+    }
+
+    if (tab === "Completed") {
+      return `${base} border-slate-200 bg-slate-100 text-slate-600 ${selected} ${
+        active ? "ring-slate-200" : ""
+      }`;
+    }
+
+    if (tab === "upcoming") {
+      return `${base} border-blue-200 bg-blue-50 text-blue-700 ${selected} ${
+        active ? "ring-blue-200" : ""
+      }`;
+    }
+
+    return `${base} border-slate-200 bg-white text-slate-600 ${
+      active ? "shadow-sm ring-2 ring-slate-200 ring-offset-1" : "hover:bg-slate-50"
+    }`;
+  };
+
+  const getTypeFilterClass = (type: (typeof EVENT_TYPE_TABS)[number], active: boolean) => {
+    const base = "rounded-full border px-4 py-2 text-sm font-medium transition";
+
+    if (type === "All Types") {
+      return `${base} border-slate-200 bg-white text-slate-600 ${
+        active ? "shadow-sm ring-2 ring-slate-200 ring-offset-1" : "hover:bg-slate-50"
+      }`;
+    }
+
+    return `${base} border-[#c7d5fb] bg-[#eef3ff] text-[#1e3a8a] ${
+      active ? "shadow-sm ring-2 ring-[#c7d5fb] ring-offset-1" : "opacity-80 hover:opacity-100"
+    }`;
+  };
+
+  const getCategoryFilterClass = (active: boolean) => {
+    const base = "rounded-full border px-4 py-2 text-sm font-medium transition";
+
+    return `${base} border-slate-200 bg-slate-100 text-slate-700 ${
+      active ? "shadow-sm ring-2 ring-slate-200 ring-offset-1" : "opacity-80 hover:opacity-100"
+    }`;
+  };
+
   const resetFilters = () => {
     setSearchTerm("");
     setSelectedStatus("All Statuses");
@@ -665,11 +717,7 @@ export default function EventsPage() {
                 <button
                   key={tab}
                   onClick={() => setSelectedStatus(tab)}
-                  className={`rounded-full px-4 py-2 text-sm font-medium transition ${
-                    active
-                      ? "bg-[#1e3a8a] text-white shadow-sm"
-                      : "bg-slate-100 text-slate-600 hover:bg-slate-200"
-                  }`}
+                  className={getStatusFilterClass(tab, active)}
                 >
                   {tab === "upcoming"
                     ? "Upcoming"
@@ -689,11 +737,7 @@ export default function EventsPage() {
                 <button
                   key={type}
                   onClick={() => setSelectedEventType(type)}
-                  className={`rounded-full border px-4 py-2 text-sm transition ${
-                    active
-                      ? "border-[#1e3a8a] bg-[#1e3a8a] text-white"
-                      : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
-                  }`}
+                  className={getTypeFilterClass(type, active)}
                 >
                   {type}
                 </button>
@@ -710,11 +754,7 @@ export default function EventsPage() {
                   <button
                     key={category}
                     onClick={() => setSelectedCategory(category)}
-                    className={`rounded-full border px-4 py-2 text-sm transition ${
-                      active
-                        ? "border-[#1e3a8a] bg-[#1e3a8a]/10 text-[#1e3a8a]"
-                        : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
-                    }`}
+                    className={getCategoryFilterClass(active)}
                   >
                     {category}
                   </button>
