@@ -71,6 +71,16 @@ const STATUS_TABS = [
   "Joined",
 ] as const;
 
+const EVENT_TYPE_TABS = [
+  "All Types",
+  "Solo Events",
+  "Team Events",
+  "University Solo",
+  "University Team",
+  "Student Solo",
+  "Student Team",
+] as const;
+
 export default function EventsPage() {
   const [events, setEvents] = useState<EventItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -79,6 +89,8 @@ export default function EventsPage() {
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedStatus, setSelectedStatus] =
     useState<(typeof STATUS_TABS)[number]>("All Statuses");
+  const [selectedEventType, setSelectedEventType] =
+    useState<(typeof EVENT_TYPE_TABS)[number]>("All Types");
   const [selectedCategory, setSelectedCategory] = useState("All Categories");
   const [selectedDateKey, setSelectedDateKey] = useState("");
   const [jumpToDate, setJumpToDate] = useState("");
@@ -398,7 +410,16 @@ export default function EventsPage() {
           selectedCategory === "All Categories" ||
           event.category === selectedCategory;
 
-        return matchesSearch && matchesStatus && matchesCategory;
+        const eventType = getEventTypeLabel(event);
+        const matchesEventType =
+          selectedEventType === "All Types" ||
+          (selectedEventType === "Solo Events" && !event.is_team_based) ||
+          (selectedEventType === "Team Events" && event.is_team_based) ||
+          eventType === selectedEventType;
+
+        return (
+          matchesSearch && matchesStatus && matchesCategory && matchesEventType
+        );
       })
       .sort((a, b) => {
         const aTime = a.parsedDate
@@ -409,7 +430,14 @@ export default function EventsPage() {
           : Number.POSITIVE_INFINITY;
         return aTime - bTime;
       });
-  }, [baseEvents, searchTerm, selectedStatus, selectedCategory, joinedEvents]);
+  }, [
+    baseEvents,
+    searchTerm,
+    selectedStatus,
+    selectedCategory,
+    selectedEventType,
+    joinedEvents,
+  ]);
 
   const availableMonths = useMemo(() => {
     const map = new Map<string, Date>();
@@ -560,6 +588,7 @@ export default function EventsPage() {
   const resetFilters = () => {
     setSearchTerm("");
     setSelectedStatus("All Statuses");
+    setSelectedEventType("All Types");
     setSelectedCategory("All Categories");
     setSelectedDateKey("");
     setJumpToDate("");
@@ -568,6 +597,7 @@ export default function EventsPage() {
   const hasActiveFilters =
     searchTerm.trim() !== "" ||
     selectedStatus !== "All Statuses" ||
+    selectedEventType !== "All Types" ||
     selectedCategory !== "All Categories" ||
     Boolean(jumpToDate);
 
@@ -627,6 +657,26 @@ export default function EventsPage() {
                     : tab === "ongoing"
                     ? "Ongoing"
                     : tab}
+                </button>
+              );
+            })}
+          </div>
+
+          <div className="mt-4 flex flex-wrap items-center gap-2">
+            {EVENT_TYPE_TABS.map((type) => {
+              const active = selectedEventType === type;
+
+              return (
+                <button
+                  key={type}
+                  onClick={() => setSelectedEventType(type)}
+                  className={`rounded-full border px-4 py-2 text-sm transition ${
+                    active
+                      ? "border-[#1e3a8a] bg-[#1e3a8a] text-white"
+                      : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
+                  }`}
+                >
+                  {type}
                 </button>
               );
             })}
