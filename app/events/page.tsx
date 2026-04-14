@@ -46,7 +46,26 @@ type NormalizedEvent = EventItem & {
   fillPercentage: number;
   isFull: boolean;
   daysFromToday: number | null;
+  parsedDate: Date | null;
 };
+
+type TimelineEvent = NormalizedEvent & {
+  day: number;
+  leftPercent: number;
+  stackIndex: number;
+};
+
+type TeamMembershipRow = {
+  teams?: { event?: string | null } | { event?: string | null }[] | null;
+};
+
+const STATUS_TABS = [
+  "All Statuses",
+  "Completed",
+  "upcoming",
+  "ongoing",
+  "Joined",
+] as const;
 
 export default function EventsPage() {
   const [events, setEvents] = useState<EventItem[]>([]);
@@ -54,16 +73,23 @@ export default function EventsPage() {
   const [error, setError] = useState("");
 
   const [searchTerm, setSearchTerm] = useState("");
-  const [selectedCategory, setSelectedCategory] = useState("All");
-  // Time-range filter: Next 7 / 14 / 30 days or All
-  const [selectedWindow, setSelectedWindow] = useState("Next 30 days");
-  const [selectedStatus, setSelectedStatus] = useState("All");
+  const [selectedStatus, setSelectedStatus] =
+    useState<(typeof STATUS_TABS)[number]>("All Statuses");
+  const [selectedCategory, setSelectedCategory] = useState("All Categories");
   const [selectedDateKey, setSelectedDateKey] = useState("");
-  // Capacity filter: All / Available / Full
-  const [selectedCapacity, setSelectedCapacity] = useState("All");
-  // Sort option: date_asc | date_desc
-  const [selectedSort, setSelectedSort] = useState("date_asc");
+  const [jumpToDate, setJumpToDate] = useState("");
   const [joinedEvents, setJoinedEvents] = useState<string[]>([]);
+
+  const today = useMemo(() => {
+    const d = new Date();
+    d.setHours(0, 0, 0, 0);
+    return d;
+  }, []);
+
+  const [currentMonth, setCurrentMonth] = useState(() => {
+    const d = new Date();
+    return new Date(d.getFullYear(), d.getMonth(), 1);
+  });
 
   const mapRowToEvent = (row: EventRow): EventItem => {
     const pickedDate = row.event_date ?? row.date ?? null;
@@ -96,8 +122,13 @@ export default function EventsPage() {
           .select("*")
           .order("event_date", { ascending: true });
 
+        let loadedEvents: EventItem[] = [];
+
         if (!viewError && viewData) {
-          setEvents((viewData as EventRow[]).map(mapRowToEvent));
+          loadedEvents = (viewData as EventRow[]).map(mapRowToEvent);
+          setEvents(loadedEvents);
+          setLoading(false);
+          loadJoinedEvents(loadedEvents);
           return;
         }
 
@@ -112,18 +143,67 @@ export default function EventsPage() {
           return;
         }
 
-        setEvents(((tableData as EventRow[]) || []).map(mapRowToEvent));
+        loadedEvents = ((tableData as EventRow[]) || []).map(mapRowToEvent);
+        setEvents(loadedEvents);
+        setLoading(false);
+        loadJoinedEvents(loadedEvents);
       } catch (err) {
         console.error(err);
         setError("Something went wrong while loading events.");
         setEvents([]);
-      } finally {
         setLoading(false);
+      } finally {
       }
     };
 
     loadEvents();
   }, []);
+
+  const loadJoinedEvents = async (loadedEvents: EventItem[]) => {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+
+    if (!user) {
+      setJoinedEvents([]);
+      return;
+    }
+
+    const joined = new Set<string>();
+
+    const { data: registrations } = await supabase
+      .from("event_registrations")
+      .select("event_id")
+      .eq("user_id", user.id);
+
+    ((registrations || []) as { event_id: string }[]).forEach((registration) => {
+      joined.add(registration.event_id);
+    });
+
+    const { data: memberships } = await supabase
+      .from("team_members")
+      .select("teams(event)")
+      .eq("user_id", user.id)
+      .neq("status", "rejected");
+
+    const eventIdByTitle = new Map(
+      loadedEvents.map((event) => [event.title.toLowerCase(), event.id])
+    );
+
+    ((memberships || []) as TeamMembershipRow[]).forEach((membership) => {
+      const team = Array.isArray(membership.teams)
+        ? membership.teams[0]
+        : membership.teams;
+      const eventTitle = team?.event?.toLowerCase();
+      const eventId = eventTitle ? eventIdByTitle.get(eventTitle) : undefined;
+
+      if (eventId) {
+        joined.add(eventId);
+      }
+    });
+
+    setJoinedEvents(Array.from(joined));
+  };
 
   const handleJoinToggle = (eventId: string) => {
     setJoinedEvents((prev) =>
@@ -141,19 +221,21 @@ export default function EventsPage() {
     if (!date) return "upcoming";
 
     const now = new Date();
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
+    const todayLocal = new Date();
+    todayLocal.setHours(0, 0, 0, 0);
 
     const eventDay = new Date(`${date}T00:00:00`);
     if (Number.isNaN(eventDay.getTime())) return "upcoming";
 
-    if (eventDay > today) return "upcoming";
-    if (eventDay < today) return "completed";
+    if (eventDay > todayLocal) return "upcoming";
+    if (eventDay < todayLocal) return "completed";
 
     const currentTime = now.toTimeString().slice(0, 5);
 
     if (start && currentTime < start) return "upcoming";
-    if (start && end && currentTime >= start && currentTime <= end) return "ongoing";
+    if (start && end && currentTime >= start && currentTime <= end) {
+      return "ongoing";
+    }
     if (end && currentTime > end) return "completed";
 
     return "upcoming";
@@ -205,9 +287,6 @@ export default function EventsPage() {
   };
 
   const normalizedEvents = useMemo<NormalizedEvent[]>(() => {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-
     return events.map((event) => {
       const dateInfo = formatDateInfo(event.date);
       const registered = event.registered_count ?? 0;
@@ -223,6 +302,7 @@ export default function EventsPage() {
         ...event,
         rawDateKey: dateInfo.rawDateKey,
         displayDate: dateInfo.displayDate,
+        parsedDate: dateInfo.parsed,
         timeLabel: formatTimeLabel(event.start_time, event.end_time),
         status:
           event.computed_status ??
@@ -232,277 +312,305 @@ export default function EventsPage() {
         daysFromToday,
       };
     });
-  }, [events]);
+  }, [events, today]);
 
-  const nearEvents = useMemo(() => {
-    return normalizedEvents.filter((event) => {
-      if (event.status === "ongoing") return true;
-      if (event.daysFromToday === null) return false;
-      return event.daysFromToday >= 0 && event.daysFromToday <= 21;
-    });
-  }, [normalizedEvents]);
-
-  const baseEventsForFilters = useMemo(() => {
-    // Determine days limit based on selectedWindow
-    if (selectedWindow === "All") return normalizedEvents;
-
-    const mapWindowToDays: Record<string, number | null> = {
-      "Next 7 days": 7,
-      "Next 14 days": 14,
-      "Next 30 days": 30,
-    };
-
-    const daysLimit = mapWindowToDays[selectedWindow] ?? null;
-
-    if (daysLimit === null) return normalizedEvents;
-
-    return normalizedEvents.filter((event) => {
-      if (event.status === "ongoing") return true;
-      if (event.daysFromToday === null) return false;
-      return event.daysFromToday >= 0 && event.daysFromToday <= daysLimit;
-    });
-  }, [normalizedEvents, selectedWindow]);
+  const baseEvents = useMemo(() => normalizedEvents, [normalizedEvents]);
 
   const categoryOptions = useMemo(() => {
     const categories = Array.from(
-      new Set(baseEventsForFilters.map((event) => event.category).filter(Boolean))
+      new Set(baseEvents.map((event) => event.category).filter(Boolean))
     ).sort();
-    return ["All", ...categories];
-  }, [baseEventsForFilters]);
+
+    return ["All Categories", ...categories];
+  }, [baseEvents]);
 
   const filteredEvents = useMemo(() => {
     const search = searchTerm.trim().toLowerCase();
 
-    let result = baseEventsForFilters.filter((event) => {
-      const matchesSearch =
-        !search ||
-        event.title.toLowerCase().includes(search) ||
-        event.description.toLowerCase().includes(search) ||
-        event.category.toLowerCase().includes(search);
+    return baseEvents
+      .filter((event) => {
+        const matchesSearch =
+          !search ||
+          event.title.toLowerCase().includes(search) ||
+          event.description.toLowerCase().includes(search) ||
+          event.category.toLowerCase().includes(search) ||
+          event.location.toLowerCase().includes(search);
 
-      const matchesCategory =
-        selectedCategory === "All" || event.category === selectedCategory;
+        const matchesStatus =
+          selectedStatus === "All Statuses" ||
+          (selectedStatus === "Joined" && joinedEvents.includes(event.id)) ||
+          (selectedStatus === "Completed" && event.status === "completed") ||
+          event.status === selectedStatus;
 
-      const matchesStatus =
-        selectedStatus === "All" ||
-        (selectedStatus === "Joined" && joinedEvents.includes(event.id)) ||
-        event.status === selectedStatus;
+        const matchesCategory =
+          selectedCategory === "All Categories" ||
+          event.category === selectedCategory;
 
-      return matchesSearch && matchesCategory && matchesStatus;
-    });
+        return matchesSearch && matchesStatus && matchesCategory;
+      })
+      .sort((a, b) => {
+        const aTime = a.parsedDate
+          ? a.parsedDate.getTime()
+          : Number.POSITIVE_INFINITY;
+        const bTime = b.parsedDate
+          ? b.parsedDate.getTime()
+          : Number.POSITIVE_INFINITY;
+        return aTime - bTime;
+      });
+  }, [baseEvents, searchTerm, selectedStatus, selectedCategory, joinedEvents]);
 
-    // Capacity filter
-    result = result.filter((event) => {
-      if (selectedCapacity === "All") return true;
-      if (selectedCapacity === "Available") return !event.isFull;
-      if (selectedCapacity === "Full") return event.isFull;
-      return true;
-    });
-
-    // Sort results by selectedSort
-    result.sort((a, b) => {
-      const aDays = a.daysFromToday === null ? Number.POSITIVE_INFINITY : a.daysFromToday;
-      const bDays = b.daysFromToday === null ? Number.POSITIVE_INFINITY : b.daysFromToday;
-
-      if (selectedSort === "date_desc") return bDays - aDays;
-      // default date_asc
-      return aDays - bDays;
-    });
-
-    return result;
-  }, [
-    baseEventsForFilters,
-    searchTerm,
-    selectedCategory,
-    selectedStatus,
-    joinedEvents,
-    selectedCapacity,
-    selectedSort,
-  ]);
-
-  const groupedDates = useMemo(() => {
-    const map = new Map<string, NormalizedEvent[]>();
+  const availableMonths = useMemo(() => {
+    const map = new Map<string, Date>();
 
     filteredEvents.forEach((event) => {
-      if (!map.has(event.rawDateKey)) {
-        map.set(event.rawDateKey, []);
+      if (!event.parsedDate) return;
+
+      const year = event.parsedDate.getFullYear();
+      const month = event.parsedDate.getMonth();
+      const key = `${year}-${month}`;
+
+      if (!map.has(key)) {
+        map.set(key, new Date(year, month, 1));
       }
-      map.get(event.rawDateKey)!.push(event);
     });
 
-    const entries = Array.from(map.entries()).sort((a, b) => {
-      const [ka] = a;
-      const [kb] = b;
-      if (ka === "no-date") return 1;
-      if (kb === "no-date") return -1;
-      return ka.localeCompare(kb);
-    });
+    const months = Array.from(map.values()).sort(
+      (a, b) => a.getTime() - b.getTime()
+    );
 
-    return entries.map(([key, items]) => {
-      let parsed: Date | null = null;
+    if (months.length === 0) {
+      return [new Date(today.getFullYear(), today.getMonth(), 1)];
+    }
 
-      if (key !== "no-date") {
-        parsed = new Date(`${key}T00:00:00`);
-        if (Number.isNaN(parsed.getTime())) parsed = null;
-      }
-
-      return {
-        key,
-        items,
-        dayLabel: parsed
-          ? parsed.toLocaleDateString("en-GB", { day: "2-digit" })
-          : "--",
-        monthLabel: parsed
-          ? parsed.toLocaleDateString("en-GB", { month: "2-digit" })
-          : "00",
-      };
-    });
-  }, [filteredEvents]);
+    return months;
+  }, [filteredEvents, today]);
 
   useEffect(() => {
-    if (groupedDates.length === 0) {
+    const exists = availableMonths.some(
+      (m) =>
+        m.getFullYear() === currentMonth.getFullYear() &&
+        m.getMonth() === currentMonth.getMonth()
+    );
+
+    if (!exists && availableMonths.length > 0) {
+      setCurrentMonth(availableMonths[0]);
+    }
+  }, [availableMonths, currentMonth]);
+
+  useEffect(() => {
+    if (!jumpToDate) return;
+
+    const picked = new Date(`${jumpToDate}T00:00:00`);
+    if (Number.isNaN(picked.getTime())) return;
+
+    setCurrentMonth(new Date(picked.getFullYear(), picked.getMonth(), 1));
+    setSelectedDateKey(jumpToDate);
+  }, [jumpToDate]);
+
+  const monthEvents = useMemo(() => {
+    return filteredEvents.filter((event) => {
+      if (!event.parsedDate) return false;
+      return (
+        event.parsedDate.getFullYear() === currentMonth.getFullYear() &&
+        event.parsedDate.getMonth() === currentMonth.getMonth()
+      );
+    });
+  }, [filteredEvents, currentMonth]);
+
+  const daysInCurrentMonth = useMemo(() => {
+    return new Date(
+      currentMonth.getFullYear(),
+      currentMonth.getMonth() + 1,
+      0
+    ).getDate();
+  }, [currentMonth]);
+
+  const monthLabel = useMemo(() => {
+    return currentMonth.toLocaleDateString("en-GB", {
+      month: "long",
+      year: "numeric",
+    });
+  }, [currentMonth]);
+
+  const timelineEvents = useMemo<TimelineEvent[]>(() => {
+    const dayCounts = new Map<string, number>();
+
+    return monthEvents.map((event) => {
+      const day = event.parsedDate?.getDate() ?? 1;
+      const leftPercent =
+        daysInCurrentMonth <= 1
+          ? 0
+          : ((day - 1) / (daysInCurrentMonth - 1)) * 100;
+
+      const key = event.rawDateKey;
+      const stackIndex = dayCounts.get(key) ?? 0;
+      dayCounts.set(key, stackIndex + 1);
+
+      return {
+        ...event,
+        day,
+        leftPercent,
+        stackIndex,
+      };
+    });
+  }, [monthEvents, daysInCurrentMonth]);
+
+  useEffect(() => {
+    if (timelineEvents.length === 0) {
       setSelectedDateKey("");
       return;
     }
 
-    const exists = groupedDates.some((group) => group.key === selectedDateKey);
-    if (!selectedDateKey || !exists) {
-      setSelectedDateKey(groupedDates[0].key);
-    }
-  }, [groupedDates, selectedDateKey]);
+    const exists = timelineEvents.some(
+      (event) => event.rawDateKey === selectedDateKey
+    );
 
-  useEffect(() => {
-    if (
-      selectedCategory !== "All" &&
-      !categoryOptions.includes(selectedCategory)
-    ) {
-      setSelectedCategory("All");
+    if (!selectedDateKey || !exists) {
+      setSelectedDateKey(timelineEvents[0].rawDateKey);
     }
-  }, [categoryOptions, selectedCategory]);
+  }, [timelineEvents, selectedDateKey]);
 
   const selectedEvents = useMemo(() => {
-    if (!selectedDateKey && groupedDates.length > 0) {
-      return groupedDates[0].items;
-    }
+    if (!selectedDateKey) return [];
+    return timelineEvents.filter((event) => event.rawDateKey === selectedDateKey);
+  }, [timelineEvents, selectedDateKey]);
 
-    const found = groupedDates.find((group) => group.key === selectedDateKey);
-    return found ? found.items : [];
-  }, [groupedDates, selectedDateKey]);
+  const currentMonthIndex = useMemo(() => {
+    return availableMonths.findIndex(
+      (m) =>
+        m.getFullYear() === currentMonth.getFullYear() &&
+        m.getMonth() === currentMonth.getMonth()
+    );
+  }, [availableMonths, currentMonth]);
+
+  const goToPrevMonth = () => {
+    if (currentMonthIndex <= 0) return;
+    setCurrentMonth(availableMonths[currentMonthIndex - 1]);
+    setSelectedDateKey("");
+  };
+
+  const goToNextMonth = () => {
+    if (currentMonthIndex >= availableMonths.length - 1) return;
+    setCurrentMonth(availableMonths[currentMonthIndex + 1]);
+    setSelectedDateKey("");
+  };
 
   const getStatusBadge = (status: string) => {
-    if (status === "ongoing") return "bg-green-50 text-green-700";
-    if (status === "completed") return "bg-slate-100 text-slate-600";
-    return "bg-[#e8eefc] text-[#1e3a8a]";
+    if (status === "ongoing") {
+      return "bg-green-50 text-green-700 border-green-200";
+    }
+    if (status === "completed") {
+      return "bg-slate-100 text-slate-600 border-slate-200";
+    }
+    return "bg-blue-50 text-blue-700 border-blue-200";
   };
+
+  const resetFilters = () => {
+    setSearchTerm("");
+    setSelectedStatus("All Statuses");
+    setSelectedCategory("All Categories");
+    setSelectedDateKey("");
+    setJumpToDate("");
+  };
+
+  const hasActiveFilters =
+    searchTerm.trim() !== "" ||
+    selectedStatus !== "All Statuses" ||
+    selectedCategory !== "All Categories" ||
+    Boolean(jumpToDate);
 
   return (
     <main className="min-h-screen bg-slate-50">
       <AppNavbar />
 
       <section className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
-        <div className="overflow-hidden rounded-[30px] bg-gradient-to-br from-[#1e3a8a] via-[#2847a1] to-[#0f766e] p-6 text-white shadow-xl sm:p-8">
-          <div className="grid gap-3 lg:grid-cols-6">
+        <div className="rounded-[30px] border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
             <div>
-              <input
-                type="text"
-                placeholder="Search by title, category, or keyword"
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-[#1e3a8a] focus:ring-2 focus:ring-[#1e3a8a]/10"
-              />
-              <p className="mt-1 text-xs text-slate-500">Find events by title, category, or keywords.</p>
+              <h1 className="text-2xl font-semibold text-slate-900">Events</h1>
             </div>
 
-            <div>
-              <select
-                value={selectedCategory}
-                onChange={(e) => setSelectedCategory(e.target.value)}
-                className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-[#1e3a8a] focus:ring-2 focus:ring-[#1e3a8a]/10"
-              >
-                {categoryOptions.map((c) => (
-                  <option key={c} value={c}>
-                    {c}
-                  </option>
-                ))}
-              </select>
-              <p className="mt-1 text-xs text-slate-500">Filter events by category (e.g., Workshops, Research).</p>
-            </div>
+            <div className="w-full lg:max-w-xl">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-end">
+                <input
+                  type="text"
+                  placeholder="Search events..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-[#1e3a8a] focus:bg-white focus:ring-4 focus:ring-[#1e3a8a]/10"
+                />
 
-            <div>
-              <select
-                value={selectedWindow}
-                onChange={(e) => setSelectedWindow(e.target.value)}
-                className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-[#1e3a8a] focus:ring-2 focus:ring-[#1e3a8a]/10"
-              >
-                <option value="Next 7 days">Next 7 days</option>
-                <option value="Next 14 days">Next 14 days</option>
-                <option value="Next 30 days">Next 30 days</option>
-                <option value="All">All Events</option>
-              </select>
-              <p className="mt-1 text-xs text-slate-500">Show events happening within the selected upcoming range.</p>
-            </div>
-
-            <div>
-              <select
-                value={selectedStatus}
-                onChange={(e) => setSelectedStatus(e.target.value)}
-                className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-[#1e3a8a] focus:ring-2 focus:ring-[#1e3a8a]/10"
-              >
-                <option value="All">All Statuses</option>
-                <option value="upcoming">Upcoming</option>
-                <option value="ongoing">Ongoing</option>
-                <option value="completed">Completed</option>
-                <option value="Joined">Joined</option>
-              </select>
-              <p className="mt-1 text-xs text-slate-500">Filter by whether events are upcoming, ongoing, or completed.</p>
-            </div>
-
-            <div>
-              <select
-                value={selectedCapacity}
-                onChange={(e) => setSelectedCapacity(e.target.value)}
-                className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-[#1e3a8a] focus:ring-2 focus:ring-[#1e3a8a]/10"
-              >
-                <option value="All">All Capacities</option>
-                <option value="Available">Available</option>
-                <option value="Full">Full</option>
-              </select>
-              <p className="mt-1 text-xs text-slate-500">Show only events with available spots or fully booked events.</p>
-            </div>
-
-            <div>
-              <select
-                value={selectedSort}
-                onChange={(e) => setSelectedSort(e.target.value)}
-                className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-[#1e3a8a] focus:ring-2 focus:ring-[#1e3a8a]/10"
-              >
-                <option value="date_asc">Date: Soon → Later</option>
-                <option value="date_desc">Date: Later → Soon</option>
-              </select>
-              <p className="mt-1 text-xs text-slate-500">Sort events by date order.</p>
+                <div className="flex items-center gap-2">
+                  <label className="sr-only" htmlFor="jump-date">
+                    Go to date
+                  </label>
+                  <input
+                    id="jump-date"
+                    type="date"
+                    value={jumpToDate}
+                    onChange={(e) => setJumpToDate(e.target.value)}
+                    className="rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 outline-none transition focus:border-[#1e3a8a] focus:ring-4 focus:ring-[#1e3a8a]/10"
+                  />
+                </div>
+              </div>
             </div>
           </div>
-              onChange={(e) => setSelectedSort(e.target.value)}
-              className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-[#1e3a8a] focus:ring-2 focus:ring-[#1e3a8a]/10"
-            >
-              <option value="date_asc">Date: Soon → Later</option>
-              <option value="date_desc">Date: Later → Soon</option>
-            </select>
+
+          <div className="mt-5 flex flex-wrap items-center gap-2">
+            {STATUS_TABS.map((tab) => {
+              const active = selectedStatus === tab;
+
+              return (
+                <button
+                  key={tab}
+                  onClick={() => setSelectedStatus(tab)}
+                  className={`rounded-full px-4 py-2 text-sm font-medium transition ${
+                    active
+                      ? "bg-[#1e3a8a] text-white shadow-sm"
+                      : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                  }`}
+                >
+                  {tab === "upcoming"
+                    ? "Upcoming"
+                    : tab === "ongoing"
+                    ? "Ongoing"
+                    : tab}
+                </button>
+              );
+            })}
           </div>
 
-          <div className="mt-3 flex justify-end">
+          <div className="mt-4 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+            <div className="flex flex-wrap items-center gap-2">
+              {categoryOptions.map((category) => {
+                const active = selectedCategory === category;
+
+                return (
+                  <button
+                    key={category}
+                    onClick={() => setSelectedCategory(category)}
+                    className={`rounded-full border px-4 py-2 text-sm transition ${
+                      active
+                        ? "border-[#1e3a8a] bg-[#1e3a8a]/10 text-[#1e3a8a]"
+                        : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
+                    }`}
+                  >
+                    {category}
+                  </button>
+                );
+              })}
+            </div>
+
             <button
-              onClick={() => {
-                setSearchTerm("");
-                setSelectedCategory("All");
-                setSelectedWindow("Next 30 days");
-                setSelectedStatus("All");
-                setSelectedCapacity("All");
-                setSelectedSort("date_asc");
-              }}
-              className="rounded-xl border border-slate-200 px-4 py-3 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
+              onClick={resetFilters}
+              disabled={!hasActiveFilters}
+              className={`rounded-2xl border px-4 py-2.5 text-sm font-medium transition ${
+                hasActiveFilters
+                  ? "border-slate-200 bg-white text-slate-600 hover:bg-slate-100"
+                  : "cursor-not-allowed border-slate-100 bg-slate-50 text-slate-400"
+              }`}
             >
-              Reset Filters
+              Reset filters
             </button>
           </div>
         </div>
@@ -524,10 +632,10 @@ export default function EventsPage() {
             <div className="mb-5 flex items-center justify-between">
               <div>
                 <h2 className="text-xl font-semibold text-slate-900">
-                  Activities Timeline
+                  Events Timeline
                 </h2>
                 <p className="mt-1 text-sm text-slate-500">
-                  Showing {selectedWindow.toLowerCase()} events first to keep the page clean.
+                  Events are positioned based on their day inside the month.
                 </p>
               </div>
 
@@ -536,62 +644,104 @@ export default function EventsPage() {
               </span>
             </div>
 
-            <div className="overflow-x-auto">
-              <div className="min-w-max">
-                <div className="relative px-3 py-6">
-                  <div className="absolute left-0 right-0 top-1/2 h-[2px] -translate-y-1/2 bg-slate-200" />
+            <div className="rounded-[24px] border border-slate-200 bg-slate-50 p-4 sm:p-6">
+              <div className="mb-8 flex items-center justify-between">
+                <button
+                  onClick={goToPrevMonth}
+                  disabled={currentMonthIndex <= 0}
+                  className={`flex h-11 w-11 items-center justify-center rounded-full border text-xl transition ${
+                    currentMonthIndex <= 0
+                      ? "cursor-not-allowed border-slate-200 bg-slate-100 text-slate-300"
+                      : "border-slate-200 bg-white text-slate-700 hover:border-[#1e3a8a] hover:text-[#1e3a8a]"
+                  }`}
+                >
+                  ‹
+                </button>
 
-                  <div className="relative flex items-center gap-8">
-                    {groupedDates.length > 0 ? (
-                      groupedDates.map((group) => {
-                        const isActive = selectedDateKey === group.key;
+                <div className="text-center">
+                  <p className="text-lg font-semibold text-slate-900">{monthLabel}</p>
+                  <p className="text-sm text-slate-500">
+                    {timelineEvents.length} event{timelineEvents.length !== 1 ? "s" : ""}
+                  </p>
+                </div>
 
-                        return (
-                          <button
-                            key={group.key}
-                            onClick={() => setSelectedDateKey(group.key)}
-                            className="relative flex flex-col items-center text-center"
-                          >
-                            <span
-                              className={`mb-3 text-sm font-semibold ${
-                                isActive ? "text-[#1e3a8a]" : "text-slate-500"
-                              }`}
-                            >
-                              {group.dayLabel}/{group.monthLabel}
-                            </span>
+                <button
+                  onClick={goToNextMonth}
+                  disabled={currentMonthIndex >= availableMonths.length - 1}
+                  className={`flex h-11 w-11 items-center justify-center rounded-full border text-xl transition ${
+                    currentMonthIndex >= availableMonths.length - 1
+                      ? "cursor-not-allowed border-slate-200 bg-slate-100 text-slate-300"
+                      : "border-slate-200 bg-white text-slate-700 hover:border-[#1e3a8a] hover:text-[#1e3a8a]"
+                  }`}
+                >
+                  ›
+                </button>
+              </div>
 
-                            <span
-                              className={`z-10 h-4 w-4 rounded-full border-4 ${
-                                isActive
-                                  ? "border-[#1e3a8a] bg-white"
-                                  : "border-slate-300 bg-white"
-                              }`}
-                            />
+              <div className="relative px-2 pt-8 pb-16">
+                <div className="absolute left-0 right-0 top-[56px] h-[3px] -translate-y-1/2 rounded-full bg-slate-200" />
 
-                            <span
-                              className={`mt-3 text-xs ${
-                                isActive ? "text-[#1e3a8a]" : "text-slate-400"
-                              }`}
-                            >
-                              {group.items.length} event
-                              {group.items.length > 1 ? "s" : ""}
-                            </span>
-                          </button>
-                        );
-                      })
-                    ) : (
-                      <div className="relative z-10 rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-6">
-                        <p className="text-sm text-slate-500">
-                          No matching dates found.
-                        </p>
+                <div className="relative h-28">
+                  {Array.from({ length: daysInCurrentMonth }, (_, i) => {
+                    const day = i + 1;
+                    const leftPercent =
+                      daysInCurrentMonth <= 1
+                        ? 0
+                        : (i / (daysInCurrentMonth - 1)) * 100;
+
+                    return (
+                      <div
+                        key={day}
+                        className="absolute top-[56px] -translate-x-1/2 -translate-y-1/2"
+                        style={{ left: `${leftPercent}%` }}
+                      >
+                        <div className="h-3 w-[1px] bg-slate-300" />
+                        <span className="mt-3 block text-center text-[11px] text-slate-400">
+                          {day}
+                        </span>
                       </div>
-                    )}
-                  </div>
+                    );
+                  })}
+
+                  {timelineEvents.map((event) => {
+                    const isActive = selectedDateKey === event.rawDateKey;
+                    const verticalOffset = event.stackIndex * 16;
+
+                    return (
+                      <button
+                        key={event.id}
+                        onClick={() => setSelectedDateKey(event.rawDateKey)}
+                        className="absolute -translate-x-1/2"
+                        style={{
+                          left: `${event.leftPercent}%`,
+                          top: `${56 - verticalOffset}px`,
+                        }}
+                      >
+                        <div className="flex flex-col items-center">
+                          <div
+                            className={`h-5 w-5 rounded-full border-4 shadow-sm transition ${
+                              isActive
+                                ? "border-[#1e3a8a] bg-white"
+                                : "border-slate-300 bg-white hover:border-[#1e3a8a]"
+                            }`}
+                          />
+
+                          <span
+                            className={`mt-2 block max-w-[90px] truncate text-center text-xs font-medium ${
+                              isActive ? "text-[#1e3a8a]" : "text-slate-500"
+                            }`}
+                          >
+                            {event.day}
+                          </span>
+                        </div>
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
             </div>
 
-            <div className="mt-4 space-y-4">
+            <div className="mt-6 space-y-4">
               {selectedEvents.length > 0 ? (
                 selectedEvents.map((event) => {
                   const isJoined = joinedEvents.includes(event.id);
@@ -599,17 +749,17 @@ export default function EventsPage() {
                   return (
                     <article
                       key={event.id}
-                      className="rounded-2xl border border-slate-200 p-5 transition hover:border-[#1e3a8a] hover:bg-slate-50"
+                      className="rounded-3xl border border-slate-200 bg-white p-5 transition hover:border-[#1e3a8a]/30 hover:shadow-md"
                     >
                       <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
                         <div className="flex-1">
                           <div className="flex flex-wrap items-center gap-2">
-                            <span className="rounded-full bg-[#e8eefc] px-3 py-1 text-xs font-semibold text-[#1e3a8a]">
+                            <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700">
                               {event.category}
                             </span>
 
                             <span
-                              className={`rounded-full px-3 py-1 text-xs font-semibold ${getStatusBadge(
+                              className={`rounded-full border px-3 py-1 text-xs font-semibold ${getStatusBadge(
                                 event.status
                               )}`}
                             >
@@ -619,6 +769,12 @@ export default function EventsPage() {
                             {isJoined && (
                               <span className="rounded-full bg-green-50 px-3 py-1 text-xs font-semibold text-green-700">
                                 Joined
+                              </span>
+                            )}
+
+                            {event.isFull && (
+                              <span className="rounded-full bg-red-50 px-3 py-1 text-xs font-semibold text-red-600">
+                                Full
                               </span>
                             )}
                           </div>
@@ -631,19 +787,33 @@ export default function EventsPage() {
                             {event.description || "No description available."}
                           </p>
 
-                          <div className="mt-4 flex flex-wrap gap-x-6 gap-y-2 text-sm text-slate-500">
-                            <p>
-                              <span className="font-medium text-slate-700">Date:</span>{" "}
-                              {event.displayDate}
-                            </p>
-                            <p>
-                              <span className="font-medium text-slate-700">Time:</span>{" "}
-                              {event.timeLabel}
-                            </p>
-                            <p>
-                              <span className="font-medium text-slate-700">Place:</span>{" "}
-                              {event.location || "TBA"}
-                            </p>
+                          <div className="mt-4 grid gap-3 text-sm text-slate-500 sm:grid-cols-3">
+                            <div className="rounded-2xl bg-slate-50 px-4 py-3">
+                              <span className="block text-xs font-medium text-slate-400">
+                                Date
+                              </span>
+                              <span className="mt-1 block font-medium text-slate-700">
+                                {event.displayDate}
+                              </span>
+                            </div>
+
+                            <div className="rounded-2xl bg-slate-50 px-4 py-3">
+                              <span className="block text-xs font-medium text-slate-400">
+                                Time
+                              </span>
+                              <span className="mt-1 block font-medium text-slate-700">
+                                {event.timeLabel}
+                              </span>
+                            </div>
+
+                            <div className="rounded-2xl bg-slate-50 px-4 py-3">
+                              <span className="block text-xs font-medium text-slate-400">
+                                Place
+                              </span>
+                              <span className="mt-1 block font-medium text-slate-700">
+                                {event.location || "TBA"}
+                              </span>
+                            </div>
                           </div>
 
                           <div className="mt-5">
@@ -655,7 +825,7 @@ export default function EventsPage() {
                               </span>
                             </div>
 
-                            <div className="h-2 w-full overflow-hidden rounded-full bg-slate-200">
+                            <div className="h-2.5 w-full overflow-hidden rounded-full bg-slate-200">
                               <div
                                 className={`h-full rounded-full ${
                                   event.isFull ? "bg-red-500" : "bg-[#1e3a8a]"
@@ -669,26 +839,34 @@ export default function EventsPage() {
                         <div className="flex items-center gap-3">
                           <Link
                             href={`/events/${event.id}`}
-                            className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-100"
+                            className="rounded-2xl border border-slate-200 px-4 py-2.5 text-sm font-medium text-slate-700 transition hover:bg-slate-100"
                           >
                             Details
                           </Link>
 
                           <button
                             onClick={() => handleJoinToggle(event.id)}
-                            disabled={event.isFull && !isJoined}
-                            className={`rounded-lg px-4 py-2 text-sm font-semibold transition ${
-                              event.isFull && !isJoined
-                                ? "cursor-not-allowed bg-slate-200 text-slate-500"
+                            disabled={
+                              isJoined ||
+                              (event.isFull && !isJoined) ||
+                              event.status === "completed"
+                            }
+                            className={`rounded-2xl px-4 py-2.5 text-sm font-semibold transition ${
+                              event.status === "completed"
+                                ? "cursor-not-allowed border border-slate-200 bg-slate-100 text-slate-500"
                                 : isJoined
-                                ? "bg-red-50 text-red-600 hover:bg-red-100"
+                                ? "cursor-not-allowed bg-green-50 text-green-700"
+                                : event.isFull && !isJoined
+                                ? "cursor-not-allowed bg-slate-200 text-slate-500"
                                 : "bg-[#1e3a8a] text-white hover:opacity-90"
                             }`}
                           >
-                            {event.isFull && !isJoined
-                              ? "Full"
+                            {event.status === "completed"
+                              ? "Completed"
                               : isJoined
-                              ? "Leave"
+                              ? "Joined"
+                              : event.isFull && !isJoined
+                              ? "Full"
                               : "Join"}
                           </button>
                         </div>
@@ -699,7 +877,7 @@ export default function EventsPage() {
               ) : (
                 <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-10 text-center">
                   <p className="text-sm text-slate-500">
-                    No events matched your filters.
+                    No events in this month.
                   </p>
                 </div>
               )}

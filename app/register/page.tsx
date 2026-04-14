@@ -24,6 +24,8 @@ export default function RegisterPage() {
     return basicEmail.test(value) && value.toLowerCase().endsWith(".psut.edu.jo");
   };
 
+  const validateStudentId = (value: string) => /^\d{8}$/.test(value);
+
   const handleRegister = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setError("");
@@ -51,6 +53,11 @@ export default function RegisterPage() {
 
     if (!validatePSUTEmail(cleanEmail)) {
       setError("Only PSUT student emails (@std.psut.edu.jo) are allowed.");
+      return;
+    }
+
+    if (!validateStudentId(cleanStudentId)) {
+      setError("Student ID must be exactly 8 digits.");
       return;
     }
 
@@ -198,7 +205,11 @@ export default function RegisterPage() {
               type="text"
               placeholder="Student ID (e.g. 20210001)"
               value={studentId}
-              onChange={(e) => setStudentId(e.target.value)}
+              onChange={(e) => setStudentId(e.target.value.replace(/\D/g, "").slice(0, 8))}
+              inputMode="numeric"
+              pattern="\d{8}"
+              maxLength={8}
+              title="Student ID must be exactly 8 digits."
               required
               className={inputClass}
             />
