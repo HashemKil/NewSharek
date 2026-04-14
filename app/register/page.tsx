@@ -10,6 +10,7 @@ export default function RegisterPage() {
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
   const [email, setEmail] = useState("");
+  const [phoneNumber, setPhoneNumber] = useState("");
   const [studentId, setStudentId] = useState("");
   const [major, setMajor] = useState("");
   const [password, setPassword] = useState("");
@@ -25,6 +26,7 @@ export default function RegisterPage() {
   };
 
   const validateStudentId = (value: string) => /^\d{8}$/.test(value);
+  const validatePhoneNumber = (value: string) => /^\+?\d{7,15}$/.test(value);
 
   const handleRegister = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -35,6 +37,7 @@ export default function RegisterPage() {
     const cleanLastName = lastName.trim();
     const cleanName = `${cleanFirstName} ${cleanLastName}`.trim();
     const cleanEmail = email.trim().toLowerCase();
+    const cleanPhoneNumber = phoneNumber.trim().replace(/[\s-]/g, "");
     const cleanStudentId = studentId.trim();
     const cleanMajor = major.trim();
 
@@ -42,6 +45,7 @@ export default function RegisterPage() {
       !cleanFirstName ||
       !cleanLastName ||
       !cleanEmail ||
+      !cleanPhoneNumber ||
       !cleanMajor ||
       !cleanStudentId ||
       !password ||
@@ -58,6 +62,11 @@ export default function RegisterPage() {
 
     if (!validateStudentId(cleanStudentId)) {
       setError("Student ID must be exactly 8 digits.");
+      return;
+    }
+
+    if (!validatePhoneNumber(cleanPhoneNumber)) {
+      setError("Phone number must be 7 to 15 digits. You may start it with +.");
       return;
     }
 
@@ -91,9 +100,10 @@ export default function RegisterPage() {
         return;
       }
 
-      const { error: profileError } = await supabase.from("profiles").insert({
+      const profileInsert = {
         id: user.id,
         email: cleanEmail,
+        phone_number: cleanPhoneNumber,
         student_id: cleanStudentId,
         full_name: cleanName,
         major: cleanMajor,
@@ -105,7 +115,23 @@ export default function RegisterPage() {
         is_admin: false,
         is_club_admin: false,
         portal_verified: false,
-      });
+      };
+
+      let { error: profileError } = await supabase
+        .from("profiles")
+        .insert(profileInsert);
+
+      if (
+        profileError &&
+        profileError.message.toLowerCase().includes("phone_number")
+      ) {
+        const profileWithoutPhone: Partial<typeof profileInsert> = {
+          ...profileInsert,
+        };
+        delete profileWithoutPhone.phone_number;
+        const retry = await supabase.from("profiles").insert(profileWithoutPhone);
+        profileError = retry.error;
+      }
 
       if (profileError) {
         console.error("Profile insert error:", profileError);
@@ -118,6 +144,7 @@ export default function RegisterPage() {
       setFirstName("");
       setLastName("");
       setEmail("");
+      setPhoneNumber("");
       setStudentId("");
       setMajor("");
       setPassword("");
@@ -197,6 +224,19 @@ export default function RegisterPage() {
               autoCapitalize="none"
               autoCorrect="off"
               spellCheck={false}
+              required
+              className={inputClass}
+            />
+
+            <input
+              type="tel"
+              placeholder="Phone Number (e.g. +962790000000)"
+              value={phoneNumber}
+              onChange={(e) =>
+                setPhoneNumber(e.target.value.replace(/[^\d+]/g, "").slice(0, 16))
+              }
+              inputMode="tel"
+              autoComplete="tel"
               required
               className={inputClass}
             />

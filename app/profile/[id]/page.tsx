@@ -11,6 +11,7 @@ type Profile = {
   id: string;
   full_name: string | null;
   email?: string | null;
+  phone_number?: string | null;
   student_id?: string | null;
   major?: string | null;
   academic_year?: string | null;
@@ -51,9 +52,7 @@ export default function MemberProfilePage() {
 
         const { data, error: profileError } = await supabase
           .from("profiles")
-          .select(
-            "id, full_name, email, student_id, major, academic_year, bio, skills, interests, avatar_url, portal_verified"
-          )
+          .select("*")
           .eq("id", id)
           .single();
 
@@ -170,6 +169,15 @@ export default function MemberProfilePage() {
                   <h2 className="text-sm font-semibold text-gray-500">Email</h2>
                   <p className="mt-2 text-base text-gray-900">
                     {profile.email || "Not specified"}
+                  </p>
+                </div>
+
+                <div>
+                  <h2 className="text-sm font-semibold text-gray-500">
+                    Phone Number
+                  </h2>
+                  <p className="mt-2 text-base text-gray-900">
+                    {profile.phone_number || "Not specified"}
                   </p>
                 </div>
 

@@ -4,6 +4,9 @@ add column if not exists is_team_based boolean not null default false;
 alter table public.events
 add column if not exists is_university_event boolean not null default false;
 
+alter table public.profiles
+add column if not exists phone_number text;
+
 alter table public.teams
 add column if not exists is_open_to_members boolean not null default true;
 

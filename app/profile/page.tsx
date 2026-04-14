@@ -11,6 +11,7 @@ type Profile = {
   id: string;
   full_name: string;
   email?: string;
+  phone_number?: string;
   student_id?: string;
   major?: string;
   academic_year?: string;
@@ -94,6 +95,7 @@ export default function ProfilePage() {
   const [profile, setProfile] = useState<Profile | null>(null);
 
   const [fullName, setFullName] = useState("");
+  const [phoneNumber, setPhoneNumber] = useState("");
   const [studentIdState, setStudentIdState] = useState("");
   const [majorState, setMajorState] = useState("");
 
@@ -271,6 +273,7 @@ export default function ProfilePage() {
 
         setProfile(data);
         setFullName(data.full_name || "");
+        setPhoneNumber(data.phone_number || "");
         setStudentIdState(data.student_id || "");
         setMajorState(data.major || "");
         setYear(data.academic_year || "");
@@ -427,6 +430,12 @@ export default function ProfilePage() {
       .split(",")
       .map((skill) => skill.trim())
       .filter((skill) => skill.length > 0);
+    const cleanPhoneNumber = phoneNumber.trim().replace(/[\s-]/g, "");
+
+    if (cleanPhoneNumber && !/^\+?\d{7,15}$/.test(cleanPhoneNumber)) {
+      setError("Phone number must be 7 to 15 digits. You may start it with +.");
+      return;
+    }
 
     try {
       const {
@@ -443,6 +452,7 @@ export default function ProfilePage() {
         .from("profiles")
         .update({
           academic_year: year.trim() || null,
+          phone_number: cleanPhoneNumber || null,
           bio: bio.trim() || null,
           skills: cleanedSkills,
           interests,
@@ -458,6 +468,7 @@ export default function ProfilePage() {
 
       setProfile(data);
       setFullName(data.full_name || "");
+      setPhoneNumber(data.phone_number || "");
       setStudentIdState(data.student_id || "");
       setMajorState(data.major || "");
       setYear(data.academic_year || "");
@@ -1070,6 +1081,7 @@ export default function ProfilePage() {
                       setInterests(profile?.interests || []);
                       setAvatarUrl(profile?.avatar_url || "");
                       setFullName(profile?.full_name || "");
+                      setPhoneNumber(profile?.phone_number || "");
                       setStudentIdState(profile?.student_id || "");
                       setMajorState(profile?.major || "");
                       setError("");
@@ -1098,6 +1110,31 @@ export default function ProfilePage() {
                 <p className="mt-2 text-base text-gray-900">
                   {email || "No email"}
                 </p>
+              </div>
+
+              <div>
+                <h3 className="text-sm font-semibold text-gray-500">
+                  Phone Number
+                </h3>
+                {!editing ? (
+                  <p className="mt-2 text-base text-gray-900">
+                    {phoneNumber || profile?.phone_number || "Not specified"}
+                  </p>
+                ) : (
+                  <input
+                    type="tel"
+                    value={phoneNumber}
+                    onChange={(e) =>
+                      setPhoneNumber(
+                        e.target.value.replace(/[^\d+]/g, "").slice(0, 16)
+                      )
+                    }
+                    placeholder="e.g. +962790000000"
+                    inputMode="tel"
+                    autoComplete="tel"
+                    className={inputClass}
+                  />
+                )}
               </div>
 
               <div>
