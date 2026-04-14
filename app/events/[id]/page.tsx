@@ -92,7 +92,7 @@ export default function EventDetailsPage() {
 
   const eventDate = event?.event_date ?? event?.date ?? null;
   const isTeamBased = Boolean(event?.is_team_based);
-  const eventTypeLabel = isTeamBased ? "Team based" : "Solo";
+  const eventTypeLabel = isTeamBased ? "Team based" : "Solo based";
 
   const selectedTeam = useMemo(
     () => teams.find((team) => team.id === selectedTeamId) ?? teams[0] ?? null,

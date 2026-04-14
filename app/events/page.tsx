@@ -128,7 +128,7 @@ export default function EventsPage() {
   };
 
   const getEventTypeLabel = (event: Pick<EventItem, "is_team_based">) => {
-    return event.is_team_based ? "Team based" : "Solo";
+    return event.is_team_based ? "Team based" : "Solo based";
   };
 
   useEffect(() => {
