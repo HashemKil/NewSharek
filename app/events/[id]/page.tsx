@@ -402,14 +402,22 @@ export default function EventDetailsPage() {
     setSuccess("");
 
     try {
-      const { error: leaveError } = await supabase
+      const { data: deletedRows, error: leaveError } = await supabase
         .from("event_registrations")
         .delete()
         .eq("event_id", event.id)
-        .eq("user_id", profile.id);
+        .eq("user_id", profile.id)
+        .select("id");
 
       if (leaveError) {
         setError(leaveError.message);
+        return;
+      }
+
+      if (!deletedRows || deletedRows.length === 0) {
+        setError(
+          "Could not leave this event yet. The database needs the event registration delete policy."
+        );
         return;
       }
 

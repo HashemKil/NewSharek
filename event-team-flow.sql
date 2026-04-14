@@ -82,6 +82,13 @@ to authenticated
 using (auth.uid() = user_id)
 with check (auth.uid() = user_id);
 
+drop policy if exists "Users can leave their event registrations" on public.event_registrations;
+create policy "Users can leave their event registrations"
+on public.event_registrations
+for delete
+to authenticated
+using (auth.uid() = user_id);
+
 drop policy if exists "Users can view team members" on public.team_members;
 create policy "Users can view team members"
 on public.team_members
