@@ -592,13 +592,8 @@ export default function EventsPage() {
   };
 
   const getStatusBadge = (status: string) => {
-    if (status === "ongoing") {
-      return "bg-green-50 text-green-700 border-green-200";
-    }
-    if (status === "completed") {
-      return "bg-slate-100 text-slate-600 border-slate-200";
-    }
-    return "bg-blue-50 text-blue-700 border-blue-200";
+    void status;
+    return "border-green-200 bg-green-50 text-green-700";
   };
 
   const eventTypeBadgeClass =
@@ -611,26 +606,9 @@ export default function EventsPage() {
     const base = "rounded-full border px-4 py-2 text-sm font-medium transition";
     const selected = active ? "shadow-sm ring-2 ring-offset-1" : "opacity-80 hover:opacity-100";
 
-    if (tab === "ongoing" || tab === "Joined") {
-      return `${base} border-green-200 bg-green-50 text-green-700 ${selected} ${
-        active ? "ring-green-200" : ""
-      }`;
-    }
-
-    if (tab === "Completed") {
-      return `${base} border-slate-200 bg-slate-100 text-slate-600 ${selected} ${
-        active ? "ring-slate-200" : ""
-      }`;
-    }
-
-    if (tab === "upcoming") {
-      return `${base} border-blue-200 bg-blue-50 text-blue-700 ${selected} ${
-        active ? "ring-blue-200" : ""
-      }`;
-    }
-
-    return `${base} border-slate-200 bg-white text-slate-600 ${
-      active ? "shadow-sm ring-2 ring-slate-200 ring-offset-1" : "hover:bg-slate-50"
+    void tab;
+    return `${base} border-green-200 bg-green-50 text-green-700 ${selected} ${
+      active ? "ring-green-200" : ""
     }`;
   };
 

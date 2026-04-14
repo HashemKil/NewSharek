@@ -194,9 +194,8 @@ export default function EventDetailsPage() {
       : formatTime(event?.start_time) || "Time not set";
 
   const getStatusBadge = (status: EventStatus) => {
-    if (status === "ongoing") return "border-green-200 bg-green-50 text-green-700";
-    if (status === "completed") return "border-slate-200 bg-slate-100 text-slate-600";
-    return "border-blue-200 bg-blue-50 text-blue-700";
+    void status;
+    return "border-green-200 bg-green-50 text-green-700";
   };
 
   const eventTypeBadgeClass =
