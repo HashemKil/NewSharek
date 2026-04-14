@@ -603,35 +603,34 @@ export default function EventsPage() {
     tab: (typeof STATUS_TABS)[number],
     active: boolean
   ) => {
-    const base = "rounded-full border px-4 py-2 text-sm font-medium transition";
-    const selected = active ? "shadow-sm ring-2 ring-offset-1" : "opacity-80 hover:opacity-100";
-
     void tab;
-    return `${base} border-green-200 bg-green-50 text-green-700 ${selected} ${
-      active ? "ring-green-200" : ""
-    }`;
+    const base = "rounded-full border px-4 py-2 text-sm font-semibold transition";
+
+    return active
+      ? `${base} border-green-700 bg-green-700 text-white shadow-sm`
+      : `${base} border-green-200 bg-green-50 text-green-700 hover:bg-green-100`;
   };
 
   const getTypeFilterClass = (type: (typeof EVENT_TYPE_TABS)[number], active: boolean) => {
-    const base = "rounded-full border px-4 py-2 text-sm font-medium transition";
+    const base = "rounded-full border px-4 py-2 text-sm font-semibold transition";
 
     if (type === "All Types") {
-      return `${base} border-slate-200 bg-white text-slate-600 ${
-        active ? "shadow-sm ring-2 ring-slate-200 ring-offset-1" : "hover:bg-slate-50"
-      }`;
+      return active
+        ? `${base} border-[#1e3a8a] bg-[#1e3a8a] text-white shadow-sm`
+        : `${base} border-[#c7d5fb] bg-[#eef3ff] text-[#1e3a8a] hover:bg-[#dfe8ff]`;
     }
 
-    return `${base} border-[#c7d5fb] bg-[#eef3ff] text-[#1e3a8a] ${
-      active ? "shadow-sm ring-2 ring-[#c7d5fb] ring-offset-1" : "opacity-80 hover:opacity-100"
-    }`;
+    return active
+      ? `${base} border-[#1e3a8a] bg-[#1e3a8a] text-white shadow-sm`
+      : `${base} border-[#c7d5fb] bg-[#eef3ff] text-[#1e3a8a] hover:bg-[#dfe8ff]`;
   };
 
   const getCategoryFilterClass = (active: boolean) => {
-    const base = "rounded-full border px-4 py-2 text-sm font-medium transition";
+    const base = "rounded-full border px-4 py-2 text-sm font-semibold transition";
 
-    return `${base} border-slate-200 bg-slate-100 text-slate-700 ${
-      active ? "shadow-sm ring-2 ring-slate-200 ring-offset-1" : "opacity-80 hover:opacity-100"
-    }`;
+    return active
+      ? `${base} border-slate-700 bg-slate-700 text-white shadow-sm`
+      : `${base} border-slate-200 bg-slate-100 text-slate-700 hover:bg-slate-200`;
   };
 
   const resetFilters = () => {
