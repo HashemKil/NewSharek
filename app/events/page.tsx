@@ -73,12 +73,8 @@ const STATUS_TABS = [
 
 const EVENT_TYPE_TABS = [
   "All Types",
-  "Solo Events",
-  "Team Events",
-  "University Solo",
-  "University Team",
-  "Student Solo",
-  "Student Team",
+  "Solo",
+  "Team",
 ] as const;
 
 export default function EventsPage() {
@@ -410,12 +406,10 @@ export default function EventsPage() {
           selectedCategory === "All Categories" ||
           event.category === selectedCategory;
 
-        const eventType = getEventTypeLabel(event);
         const matchesEventType =
           selectedEventType === "All Types" ||
-          (selectedEventType === "Solo Events" && !event.is_team_based) ||
-          (selectedEventType === "Team Events" && event.is_team_based) ||
-          eventType === selectedEventType;
+          (selectedEventType === "Solo" && !event.is_team_based) ||
+          (selectedEventType === "Team" && event.is_team_based);
 
         return (
           matchesSearch && matchesStatus && matchesCategory && matchesEventType
