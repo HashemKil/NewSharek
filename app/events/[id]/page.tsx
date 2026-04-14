@@ -817,7 +817,7 @@ export default function EventDetailsPage() {
                             </p>
                           </div>
                           {team.hasRequested && (
-                            <span className="rounded-full bg-green-50 px-2 py-1 text-xs font-semibold text-green-700">
+                            <span className="rounded-full border border-sky-200 bg-sky-50 px-2 py-1 text-xs font-semibold text-sky-700">
                               Requested
                             </span>
                           )}
