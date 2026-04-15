@@ -38,13 +38,10 @@ type Club = ClubRow & {
 
 const CLUB_FILTERS = [
   "All Clubs",
-  "Academic",
-  "IT",
   "Business",
   "Creative",
-  "Social",
-  "Sports",
-  "Others",
+  "Tech",
+  "Other",
 ] as const;
 
 const getClubName = (club: ClubRow) =>
@@ -74,7 +71,7 @@ const getClubGroup = (club: Club) => {
       "programming",
     ].some((keyword) => text.includes(keyword))
   ) {
-    return "IT";
+    return "Tech";
   }
 
   if (
@@ -93,15 +90,7 @@ const getClubGroup = (club: Club) => {
     return "Creative";
   }
 
-  if (
-    ["sport", "football", "basketball", "fitness", "chess", "gaming"].some((keyword) =>
-      text.includes(keyword)
-    )
-  ) {
-    return "Sports";
-  }
-
-  return "Others";
+  return "Other";
 };
 
 const formatDate = (value?: string | null) => {
