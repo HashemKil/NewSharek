@@ -96,6 +96,27 @@ const getClubName = (club: ClubRow) =>
 const getTeamFromMembership = (membership: TeamMemberRow) =>
   Array.isArray(membership.teams) ? membership.teams[0] : membership.teams;
 
+const psutNewsItems = [
+  {
+    label: "Student activities",
+    title: "New activities are on the way",
+    body: "Events and workshops will appear here as clubs publish them.",
+    tone: "bg-slate-100 text-slate-900",
+  },
+  {
+    label: "Club updates",
+    title: "Follow active student clubs",
+    body: "Check club announcements and browse groups that match your interests.",
+    tone: "bg-[#eef3ff] text-[#1e3a8a]",
+  },
+  {
+    label: "Team notices",
+    title: "Manage requests from Teams",
+    body: "Team requests, invites, and member changes are handled from the Teams page.",
+    tone: "bg-sky-50 text-sky-700",
+  },
+];
+
 export default function HomePage() {
   const router = useRouter();
 
@@ -108,6 +129,7 @@ export default function HomePage() {
   const [clubs, setClubs] = useState<ClubRow[]>([]);
   const [teams, setTeams] = useState<TeamRow[]>([]);
   const [memberships, setMemberships] = useState<TeamMemberRow[]>([]);
+  const [activeNewsIndex, setActiveNewsIndex] = useState(0);
 
   useEffect(() => {
     const loadHome = async () => {
@@ -222,6 +244,18 @@ export default function HomePage() {
     profile?.email?.trim().charAt(0).toUpperCase() ||
     "S";
 
+  const activeNews = psutNewsItems[activeNewsIndex];
+
+  const goToPreviousNews = () => {
+    setActiveNewsIndex((current) =>
+      current === 0 ? psutNewsItems.length - 1 : current - 1
+    );
+  };
+
+  const goToNextNews = () => {
+    setActiveNewsIndex((current) => (current + 1) % psutNewsItems.length);
+  };
+
   if (loading) {
     return (
       <main className="min-h-screen bg-slate-50">
@@ -273,30 +307,50 @@ export default function HomePage() {
 
             </div>
 
-            <div className="mt-6 grid gap-3 md:grid-cols-3">
-              <div className="rounded-lg bg-slate-100 p-4">
-                <p className="text-sm font-semibold text-slate-900">
-                  Student activities
+            <div className="mt-6">
+              <div className={`rounded-lg p-5 ${activeNews.tone}`}>
+                <p className="text-xs font-semibold uppercase">
+                  {activeNews.label}
                 </p>
-                <p className="mt-2 text-sm leading-6 text-slate-500">
-                  New events and workshops will appear as clubs publish them.
-                </p>
-              </div>
-              <div className="rounded-lg bg-[#eef3ff] p-4">
-                <p className="text-sm font-semibold text-[#1e3a8a]">
-                  Club updates
-                </p>
-                <p className="mt-2 text-sm leading-6 text-slate-600">
-                  Check the Clubs page for active groups and announcements.
+                <h2 className="mt-3 text-2xl font-bold">{activeNews.title}</h2>
+                <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-600">
+                  {activeNews.body}
                 </p>
               </div>
-              <div className="rounded-lg bg-sky-50 p-4">
-                <p className="text-sm font-semibold text-sky-700">
-                  Team notices
-                </p>
-                <p className="mt-2 text-sm leading-6 text-slate-600">
-                  Team requests and member changes are managed from Teams.
-                </p>
+
+              <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+                <div className="flex gap-2">
+                  {psutNewsItems.map((item, index) => (
+                    <button
+                      key={item.label}
+                      type="button"
+                      onClick={() => setActiveNewsIndex(index)}
+                      aria-label={`Show ${item.label}`}
+                      className={`h-2.5 rounded-full transition ${
+                        activeNewsIndex === index
+                          ? "w-8 bg-[#1e3a8a]"
+                          : "w-2.5 bg-slate-300 hover:bg-slate-400"
+                      }`}
+                    />
+                  ))}
+                </div>
+
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={goToPreviousNews}
+                    className="rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+                  >
+                    Previous
+                  </button>
+                  <button
+                    type="button"
+                    onClick={goToNextNews}
+                    className="rounded-lg bg-[#1e3a8a] px-3 py-2 text-sm font-semibold text-white transition hover:opacity-90"
+                  >
+                    Next
+                  </button>
+                </div>
               </div>
             </div>
           </section>
