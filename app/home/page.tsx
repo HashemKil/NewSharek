@@ -290,10 +290,10 @@ export default function HomePage() {
       <AppNavbar />
 
       <section className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
-        <div className="grid gap-6 lg:grid-cols-[1.65fr_0.55fr]">
+        <div className="space-y-6">
           <section className="overflow-hidden rounded-[28px] border border-slate-200 bg-white shadow-sm">
             <div
-              className="relative flex min-h-[460px] flex-col justify-end bg-cover bg-center p-6 text-white sm:p-8"
+              className="relative flex min-h-[520px] flex-col justify-end bg-cover bg-center p-6 text-white sm:p-8"
               style={{ backgroundImage: `url(${activeNews.image})` }}
             >
               <div className="absolute inset-0 bg-gradient-to-t from-slate-950/85 via-slate-950/40 to-slate-950/10" />
@@ -352,38 +352,40 @@ export default function HomePage() {
           </section>
 
           <section className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm">
-            <div className="flex items-center gap-4">
-              <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-lg bg-[#eef3ff] text-2xl font-bold text-[#1e3a8a]">
-                {initials}
+            <div className="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
+              <div className="flex items-center gap-4">
+                <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-lg bg-[#eef3ff] text-2xl font-bold text-[#1e3a8a]">
+                  {initials}
+                </div>
+                <div>
+                  <p className="text-sm font-semibold uppercase text-[#1e3a8a]">
+                    Home
+                  </p>
+                  <h2 className="mt-1 text-2xl font-bold text-slate-950">
+                    Welcome back, {firstName}
+                  </h2>
+                  <p className="mt-2 text-sm text-slate-500">
+                    {profile?.major || "Major not added"} -{" "}
+                    {profile?.academic_year || "Academic year not added"}
+                  </p>
+                </div>
               </div>
-              <div>
-                <p className="text-sm font-semibold uppercase text-[#1e3a8a]">
-                  Home
-                </p>
-                <h2 className="mt-1 text-2xl font-bold text-slate-950">
-                  Welcome back, {firstName}
-                </h2>
-                <p className="mt-2 text-sm text-slate-500">
-                  {profile?.major || "Major not added"} -{" "}
-                  {profile?.academic_year || "Academic year not added"}
-                </p>
-              </div>
-            </div>
 
-            <div className="mt-6 grid gap-3 sm:grid-cols-3">
-              <div className="rounded-lg bg-slate-100 p-4">
-                <p className="text-sm font-medium text-slate-500">Upcoming events</p>
-                <p className="mt-2 text-2xl font-bold text-slate-900">{events.length}</p>
-              </div>
-              <div className="rounded-lg bg-[#eef3ff] p-4">
-                <p className="text-sm font-medium text-[#1e3a8a]">My teams</p>
-                <p className="mt-2 text-2xl font-bold text-[#1e3a8a]">{myTeams.length}</p>
-              </div>
-              <div className="rounded-lg bg-sky-50 p-4">
-                <p className="text-sm font-medium text-sky-700">Joined events</p>
-                <p className="mt-2 text-2xl font-bold text-sky-700">
-                  {joinedEventsCount}
-                </p>
+              <div className="grid gap-3 sm:grid-cols-3 lg:min-w-[520px]">
+                <div className="rounded-lg bg-slate-100 p-4">
+                  <p className="text-sm font-medium text-slate-500">Upcoming events</p>
+                  <p className="mt-2 text-2xl font-bold text-slate-900">{events.length}</p>
+                </div>
+                <div className="rounded-lg bg-[#eef3ff] p-4">
+                  <p className="text-sm font-medium text-[#1e3a8a]">My teams</p>
+                  <p className="mt-2 text-2xl font-bold text-[#1e3a8a]">{myTeams.length}</p>
+                </div>
+                <div className="rounded-lg bg-sky-50 p-4">
+                  <p className="text-sm font-medium text-sky-700">Joined events</p>
+                  <p className="mt-2 text-2xl font-bold text-sky-700">
+                    {joinedEventsCount}
+                  </p>
+                </div>
               </div>
             </div>
           </section>
