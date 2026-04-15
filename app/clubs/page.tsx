@@ -43,7 +43,7 @@ const CLUB_FILTERS = [
   "Creative",
   "Social",
   "Sports",
-  "Development",
+  "Others",
 ] as const;
 
 const getClubName = (club: ClubRow) =>
@@ -100,21 +100,7 @@ const getClubGroup = (club: Club) => {
     return "Sports";
   }
 
-  if (
-    [
-      "development",
-      "career",
-      "training",
-      "leadership",
-      "professional",
-      "skill",
-      "workshop",
-    ].some((keyword) => text.includes(keyword))
-  ) {
-    return "Development";
-  }
-
-  return "Social";
+  return "Others";
 };
 
 const formatDate = (value?: string | null) => {
