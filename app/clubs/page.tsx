@@ -39,6 +39,7 @@ type Club = ClubRow & {
 const CLUB_FILTERS = [
   "All Clubs",
   "Academic",
+  "IT",
   "Business",
   "Creative",
   "Social",
@@ -73,7 +74,7 @@ const getClubGroup = (club: Club) => {
       "programming",
     ].some((keyword) => text.includes(keyword))
   ) {
-    return "Academic";
+    return "IT";
   }
 
   if (
