@@ -7,6 +7,27 @@ add column if not exists is_university_event boolean not null default false;
 alter table public.profiles
 add column if not exists phone_number text;
 
+update public.clubs
+set category = case
+  when lower(coalesce(category, '') || ' ' || coalesce(name, '') || ' ' || coalesce(description, '')) similar to '%(tech|computer|software|cyber|security|ai|data|engineering|robot|coding|programming)%' then 'Tech'
+  when lower(coalesce(category, '') || ' ' || coalesce(name, '') || ' ' || coalesce(description, '')) similar to '%(business|entrepreneur|startup|marketing|finance|accounting)%' then 'Business'
+  when lower(coalesce(category, '') || ' ' || coalesce(name, '') || ' ' || coalesce(description, '')) similar to '%(creative|media|design|art|music|film|photo|content)%' then 'Creative'
+  else 'Other'
+end
+where category is distinct from case
+  when lower(coalesce(category, '') || ' ' || coalesce(name, '') || ' ' || coalesce(description, '')) similar to '%(tech|computer|software|cyber|security|ai|data|engineering|robot|coding|programming)%' then 'Tech'
+  when lower(coalesce(category, '') || ' ' || coalesce(name, '') || ' ' || coalesce(description, '')) similar to '%(business|entrepreneur|startup|marketing|finance|accounting)%' then 'Business'
+  when lower(coalesce(category, '') || ' ' || coalesce(name, '') || ' ' || coalesce(description, '')) similar to '%(creative|media|design|art|music|film|photo|content)%' then 'Creative'
+  else 'Other'
+end;
+
+alter table public.clubs
+drop constraint if exists clubs_category_check;
+
+alter table public.clubs
+add constraint clubs_category_check
+check (category in ('Tech', 'Creative', 'Business', 'Other'));
+
 alter table public.teams
 add column if not exists is_open_to_members boolean not null default true;
 
