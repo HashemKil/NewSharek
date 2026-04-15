@@ -57,6 +57,10 @@ type TeamMemberRow = {
   teams?: TeamRow | TeamRow[] | null;
 };
 
+type EventRegistrationRow = {
+  event_id: string;
+};
+
 const formatDate = (value?: string | null) => {
   if (!value) return "Date not set";
   const datePart = value.split("T")[0];
@@ -99,6 +103,8 @@ export default function HomePage() {
   const [error, setError] = useState("");
   const [profile, setProfile] = useState<Profile | null>(null);
   const [events, setEvents] = useState<EventRow[]>([]);
+  const [eventRefs, setEventRefs] = useState<Pick<EventRow, "id" | "title">[]>([]);
+  const [eventRegistrations, setEventRegistrations] = useState<EventRegistrationRow[]>([]);
   const [clubs, setClubs] = useState<ClubRow[]>([]);
   const [teams, setTeams] = useState<TeamRow[]>([]);
   const [memberships, setMemberships] = useState<TeamMemberRow[]>([]);
@@ -119,8 +125,15 @@ export default function HomePage() {
           return;
         }
 
-        const [profileResult, eventsResult, clubsResult, teamsResult, membershipsResult] =
-          await Promise.all([
+        const [
+          profileResult,
+          eventsResult,
+          eventRefsResult,
+          eventRegistrationsResult,
+          clubsResult,
+          teamsResult,
+          membershipsResult,
+        ] = await Promise.all([
             supabase.from("profiles").select("*").eq("id", user.id).single(),
             supabase
               .from("events")
@@ -129,6 +142,11 @@ export default function HomePage() {
               )
               .order("event_date", { ascending: true })
               .limit(6),
+            supabase.from("events").select("id, title"),
+            supabase
+              .from("event_registrations")
+              .select("event_id")
+              .eq("user_id", user.id),
             supabase.from("clubs").select("*").limit(6),
             supabase.from("teams").select("*").order("created_at", { ascending: false }).limit(6),
             supabase
@@ -145,6 +163,10 @@ export default function HomePage() {
 
         setProfile(profileResult.data as Profile);
         setEvents(((eventsResult.data || []) as EventRow[]).filter(Boolean));
+        setEventRefs(((eventRefsResult.data || []) as Pick<EventRow, "id" | "title">[]).filter(Boolean));
+        setEventRegistrations(
+          ((eventRegistrationsResult.data || []) as EventRegistrationRow[]).filter(Boolean)
+        );
         setClubs(((clubsResult.data || []) as ClubRow[]).filter(Boolean));
         setTeams(((teamsResult.data || []) as TeamRow[]).filter(Boolean));
         setMemberships(((membershipsResult.data || []) as TeamMemberRow[]).filter(Boolean));
@@ -185,9 +207,26 @@ export default function HomePage() {
     return Array.from(byId.values()).slice(0, 4);
   }, [memberships, profile?.id, teams]);
 
-  const availableTeamsCount = useMemo(() => {
-    return teams.filter((team) => team.is_open_to_members !== false).length;
-  }, [teams]);
+  const joinedEventsCount = useMemo(() => {
+    const joined = new Set(eventRegistrations.map((registration) => registration.event_id));
+    const eventIdByTitle = new Map(
+      eventRefs
+        .filter((event) => event.title)
+        .map((event) => [event.title!.toLowerCase(), event.id])
+    );
+
+    memberships.forEach((membership) => {
+      const team = getTeamFromMembership(membership);
+      const eventTitle = team?.event?.toLowerCase();
+      const eventId = eventTitle ? eventIdByTitle.get(eventTitle) : undefined;
+
+      if (eventId) {
+        joined.add(eventId);
+      }
+    });
+
+    return joined.size;
+  }, [eventRefs, eventRegistrations, memberships]);
 
   const initials =
     profile?.full_name?.trim().charAt(0).toUpperCase() ||
@@ -278,9 +317,9 @@ export default function HomePage() {
                 <p className="mt-2 text-2xl font-bold text-[#1e3a8a]">{myTeams.length}</p>
               </div>
               <div className="rounded-lg bg-sky-50 p-4">
-                <p className="text-sm font-medium text-sky-700">Open teams</p>
+                <p className="text-sm font-medium text-sky-700">Joined events</p>
                 <p className="mt-2 text-2xl font-bold text-sky-700">
-                  {availableTeamsCount}
+                  {joinedEventsCount}
                 </p>
               </div>
             </div>
