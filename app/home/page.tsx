@@ -8,87 +8,103 @@ import { supabase } from "../../lib/supabase";
 
 type Profile = {
   id: string;
-  full_name?: string;
-  email?: string;
-  student_id?: string;
-  major?: string;
-  academic_year?: string;
-  bio?: string;
-  skills?: string[];
-  interests?: string[];
-  avatar_url?: string;
-};
-
-type EventCard = {
-  id: string;
-  title: string;
-  category: string;
-  date: string;
-  rawDate?: string;
-  location: string;
-  description: string;
+  full_name?: string | null;
+  email?: string | null;
+  phone_number?: string | null;
+  student_id?: string | null;
+  major?: string | null;
+  academic_year?: string | null;
+  bio?: string | null;
+  skills?: string[] | null;
+  interests?: string[] | null;
 };
 
 type EventRow = {
-  id?: string | null;
+  id: string;
   title?: string | null;
   category?: string | null;
-  event_date?: string | null;
-  location?: string | null;
   description?: string | null;
+  event_date?: string | null;
+  start_time?: string | null;
+  end_time?: string | null;
+  location?: string | null;
+  is_team_based?: boolean | null;
+  is_university_event?: boolean | null;
 };
 
-const fallbackEvents: EventCard[] = [
-  {
-    id: "1",
-    title: "Hackathon 2026",
-    category: "Competition",
-    date: "20 Mar 2026",
-    rawDate: "2026-03-20",
-    location: "PSUT Innovation Lab",
-    description: "Build a project, meet teammates, and compete with other students.",
-  },
-  {
-    id: "2",
-    title: "AI Team Matching Workshop",
-    category: "Workshop",
-    date: "24 Mar 2026",
-    rawDate: "2026-03-24",
-    location: "Engineering Building",
-    description: "Meet students with similar interests and form stronger project teams.",
-  },
-  {
-    id: "3",
-    title: "Startup Pitch Day",
-    category: "Event",
-    date: "28 Mar 2026",
-    rawDate: "2026-03-28",
-    location: "Main Auditorium",
-    description: "Pitch ideas, watch student startups, and network with peers.",
-  },
-  {
-    id: "4",
-    title: "UI/UX Design Meetup",
-    category: "Meetup",
-    date: "28 Mar 2026",
-    rawDate: "2026-03-28",
-    location: "Business Hall",
-    description: "A student meetup for design thinking, feedback, and collaboration.",
-  },
-];
+type ClubRow = {
+  id: string;
+  name?: string | null;
+  title?: string | null;
+  category?: string | null;
+  description?: string | null;
+  logo_url?: string | null;
+  image_url?: string | null;
+};
 
-export default function DashboardPage() {
+type TeamRow = {
+  id: string;
+  name: string;
+  event: string | null;
+  owner_id: string | null;
+  is_open_to_members?: boolean | null;
+};
+
+type TeamMemberRow = {
+  team_id: string;
+  user_id: string;
+  status: string | null;
+  teams?: TeamRow | TeamRow[] | null;
+};
+
+const formatDate = (value?: string | null) => {
+  if (!value) return "Date not set";
+  const datePart = value.split("T")[0];
+  const [year, month, day] = datePart.split("-").map(Number);
+  const parsed = new Date(year, (month || 1) - 1, day || 1);
+
+  if (!year || Number.isNaN(parsed.getTime())) return value;
+
+  return parsed.toLocaleDateString("en-GB", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  });
+};
+
+const formatTime = (value?: string | null) => {
+  if (!value) return "";
+  const [hours, minutes] = value.split(":");
+  const parsed = new Date();
+  parsed.setHours(Number(hours), Number(minutes || 0), 0, 0);
+
+  if (Number.isNaN(parsed.getTime())) return "";
+
+  return parsed.toLocaleTimeString("en-US", {
+    hour: "numeric",
+    minute: "2-digit",
+  });
+};
+
+const getClubName = (club: ClubRow) =>
+  club.name?.trim() || club.title?.trim() || "Untitled club";
+
+const getTeamFromMembership = (membership: TeamMemberRow) =>
+  Array.isArray(membership.teams) ? membership.teams[0] : membership.teams;
+
+export default function HomePage() {
   const router = useRouter();
 
   const [loading, setLoading] = useState(true);
-  const [profile, setProfile] = useState<Profile | null>(null);
-  const [events, setEvents] = useState<EventCard[]>([]);
-  const [search, setSearch] = useState("");
-  const [selectedDate, setSelectedDate] = useState("");
   const [error, setError] = useState("");
+  const [profile, setProfile] = useState<Profile | null>(null);
+  const [events, setEvents] = useState<EventRow[]>([]);
+  const [clubs, setClubs] = useState<ClubRow[]>([]);
+  const [teams, setTeams] = useState<TeamRow[]>([]);
+  const [memberships, setMemberships] = useState<TeamMemberRow[]>([]);
 
   useEffect(() => {
-    const loadDashboard = async () => {
+    const loadHome = async () => {
       setLoading(true);
       setError("");
 
@@ -103,172 +119,80 @@ export default function DashboardPage() {
           return;
         }
 
-        const profileQuery = supabase
-          .from("profiles")
-          .select("*")
-          .eq("id", user.id)
-          .single();
+        const [profileResult, eventsResult, clubsResult, teamsResult, membershipsResult] =
+          await Promise.all([
+            supabase.from("profiles").select("*").eq("id", user.id).single(),
+            supabase
+              .from("events")
+              .select(
+                "id, title, category, description, event_date, start_time, end_time, location, is_team_based, is_university_event"
+              )
+              .order("event_date", { ascending: true })
+              .limit(6),
+            supabase.from("clubs").select("*").limit(6),
+            supabase.from("teams").select("*").order("created_at", { ascending: false }).limit(6),
+            supabase
+              .from("team_members")
+              .select("team_id, user_id, status, teams(*)")
+              .eq("user_id", user.id)
+              .neq("status", "rejected"),
+          ]);
 
-        const eventsQuery = supabase
-          .from("events")
-          .select("id, title, category, event_date, location, description")
-          .order("event_date", { ascending: true })
-          .limit(12);
-
-        const [
-          { data: existingProfile, error: profileError },
-          { data: eventsData, error: eventsError },
-        ] = await Promise.all([profileQuery, eventsQuery]);
-
-        if (profileError && profileError.code !== "PGRST116") {
-          setError(profileError.message);
+        if (profileResult.error) {
+          setError(profileResult.error.message);
           return;
         }
 
-        if (existingProfile) {
-          setProfile(existingProfile);
-        } else {
-          const fallbackName =
-            user.user_metadata?.name ||
-            user.email?.split("@")[0] ||
-            "Student User";
-
-          const newProfile = {
-            id: user.id,
-            full_name: fallbackName,
-            email: user.email || "",
-            student_id: "",
-            major: "",
-            academic_year: "",
-            bio: "",
-            skills: [],
-            interests: [],
-            avatar_url: "",
-          };
-
-          const { data: insertedProfile, error: insertError } = await supabase
-            .from("profiles")
-            .insert(newProfile)
-            .select()
-            .single();
-
-          if (insertError) {
-            setError(insertError.message);
-            return;
-          }
-
-          setProfile(insertedProfile ?? newProfile);
-        }
-
-        if (eventsError || !eventsData || eventsData.length === 0) {
-          setEvents(fallbackEvents);
-          return;
-        }
-
-        const mappedEvents: EventCard[] = (eventsData as EventRow[]).map(
-          (event, index) => ({
-            id: event.id ?? String(index),
-            title: event.title ?? "Untitled Event",
-            category: event.category ?? "Event",
-            date: event.event_date
-              ? new Date(event.event_date).toLocaleDateString("en-GB", {
-                  day: "2-digit",
-                  month: "short",
-                  year: "numeric",
-                })
-              : "Date TBD",
-            rawDate: event.event_date
-              ? new Date(event.event_date).toISOString().split("T")[0]
-              : "",
-            location: event.location ?? "Location TBD",
-            description: event.description ?? "No description available yet.",
-          })
-        );
-
-        setEvents(mappedEvents);
-      } catch {
+        setProfile(profileResult.data as Profile);
+        setEvents(((eventsResult.data || []) as EventRow[]).filter(Boolean));
+        setClubs(((clubsResult.data || []) as ClubRow[]).filter(Boolean));
+        setTeams(((teamsResult.data || []) as TeamRow[]).filter(Boolean));
+        setMemberships(((membershipsResult.data || []) as TeamMemberRow[]).filter(Boolean));
+      } catch (err) {
+        console.error("HOME LOAD ERROR:", err);
         setError("Something went wrong while loading your home page.");
       } finally {
         setLoading(false);
       }
     };
 
-    loadDashboard();
+    loadHome();
   }, [router]);
 
-  const handleLogout = async () => {
-    await supabase.auth.signOut();
-    router.push("/login");
-  };
-
   const firstName = useMemo(() => {
-    return profile?.full_name?.split(" ")[0] || "Student";
-  }, [profile]);
+    return profile?.full_name?.trim().split(" ")[0] || "Student";
+  }, [profile?.full_name]);
 
   const profileMissing = useMemo(() => {
     const missing = [];
     if (!profile?.student_id) missing.push("Student ID");
+    if (!profile?.phone_number) missing.push("Phone Number");
     if (!profile?.major) missing.push("Major");
     if (!profile?.academic_year) missing.push("Academic Year");
     if (!profile?.bio) missing.push("Bio");
     if (!profile?.skills?.length) missing.push("Skills");
-    if (!profile?.interests?.length) missing.push("Interests");
     return missing;
   }, [profile]);
 
-  const filteredEvents = useMemo(() => {
-    if (!search.trim()) return events;
+  const myTeams = useMemo(() => {
+    const membershipTeams = memberships
+      .map(getTeamFromMembership)
+      .filter(Boolean) as TeamRow[];
+    const ownedTeams = teams.filter((team) => team.owner_id === profile?.id);
+    const byId = new Map<string, TeamRow>();
 
-    const term = search.toLowerCase();
+    [...ownedTeams, ...membershipTeams].forEach((team) => byId.set(team.id, team));
+    return Array.from(byId.values()).slice(0, 4);
+  }, [memberships, profile?.id, teams]);
 
-    return events.filter(
-      (event) =>
-        event.title.toLowerCase().includes(term) ||
-        event.category.toLowerCase().includes(term) ||
-        event.location.toLowerCase().includes(term) ||
-        event.description.toLowerCase().includes(term)
-    );
-  }, [events, search]);
+  const availableTeamsCount = useMemo(() => {
+    return teams.filter((team) => team.is_open_to_members !== false).length;
+  }, [teams]);
 
-  const groupedDates = useMemo(() => {
-    const map = new Map<string, EventCard[]>();
-
-    filteredEvents.forEach((event) => {
-      const key = event.rawDate || event.date;
-      if (!map.has(key)) {
-        map.set(key, []);
-      }
-      map.get(key)!.push(event);
-    });
-
-    return Array.from(map.entries()).map(([key, items]) => ({
-      key,
-      items,
-      label: items[0]?.rawDate
-        ? new Date(items[0].rawDate).toLocaleDateString("en-GB", {
-            day: "2-digit",
-            month: "2-digit",
-          })
-        : items[0]?.date || key,
-    }));
-  }, [filteredEvents]);
-
-  useEffect(() => {
-    if (groupedDates.length === 0) {
-      setSelectedDate("");
-      return;
-    }
-
-    const stillExists = groupedDates.some((group) => group.key === selectedDate);
-    if (!selectedDate || !stillExists) {
-      setSelectedDate(groupedDates[0].key);
-    }
-  }, [groupedDates, selectedDate]);
-
-  const selectedEvents = useMemo(() => {
-    const found = groupedDates.find((group) => group.key === selectedDate);
-    return found ? found.items : [];
-  }, [groupedDates, selectedDate]);
+  const initials =
+    profile?.full_name?.trim().charAt(0).toUpperCase() ||
+    profile?.email?.trim().charAt(0).toUpperCase() ||
+    "S";
 
   if (loading) {
     return (
@@ -276,7 +200,7 @@ export default function DashboardPage() {
         <AppNavbar />
         <section className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
           <div className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm">
-            <p className="text-sm text-slate-500">Loading home page...</p>
+            <p className="text-sm text-slate-500">Loading home...</p>
           </div>
         </section>
       </main>
@@ -301,277 +225,258 @@ export default function DashboardPage() {
       <AppNavbar />
 
       <section className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
-        <div className="grid gap-6 lg:grid-cols-12">
-          <div className="space-y-6 lg:col-span-8">
-            <div className="overflow-hidden rounded-[30px] bg-gradient-to-br from-[#1e3a8a] via-[#2847a1] to-[#0f766e] p-6 text-white shadow-xl sm:p-8">
-              <div className="max-w-2xl">
-                <span className="inline-flex rounded-full bg-white/15 px-3 py-1 text-xs font-medium text-white/90 backdrop-blur">
-                  Sharek Home
-                </span>
-
-                <h1 className="mt-4 text-3xl font-bold tracking-tight sm:text-4xl">
-                  Welcome back, {firstName}
-                </h1>
-
-                <p className="mt-3 text-sm leading-6 text-white/85 sm:text-base">
-                  Discover student activities, browse upcoming events, and stay connected in one simple place.
-                </p>
-
-                <div className="mt-6 flex flex-wrap gap-3">
-                  <Link
-                    href="/events"
-                    className="rounded-xl bg-white px-5 py-3 text-sm font-semibold text-[#1e3a8a] transition hover:opacity-90"
-                  >
-                    Explore Events
-                  </Link>
-
-                  <Link
-                    href="/profile"
-                    className="rounded-xl border border-white/25 bg-white/10 px-5 py-3 text-sm font-semibold text-white backdrop-blur transition hover:bg-white/15"
-                  >
-                    Edit Profile
-                  </Link>
+        <div className="grid gap-6 lg:grid-cols-[1.15fr_0.85fr]">
+          <section className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm">
+            <div className="flex flex-col gap-6 md:flex-row md:items-center md:justify-between">
+              <div className="flex items-center gap-4">
+                <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-lg bg-[#eef3ff] text-2xl font-bold text-[#1e3a8a]">
+                  {initials}
                 </div>
+                <div>
+                  <p className="text-sm font-semibold uppercase text-[#1e3a8a]">
+                    Home
+                  </p>
+                  <h1 className="mt-1 text-3xl font-bold text-slate-950">
+                    Welcome back, {firstName}
+                  </h1>
+                  <p className="mt-2 text-sm text-slate-500">
+                    {profile?.major || "Major not added"} ·{" "}
+                    {profile?.academic_year || "Academic year not added"}
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex flex-wrap gap-2">
+                <Link
+                  href="/events"
+                  className="rounded-lg bg-[#1e3a8a] px-4 py-2.5 text-sm font-semibold text-white transition hover:opacity-90"
+                >
+                  Events
+                </Link>
+                <Link
+                  href="/clubs"
+                  className="rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+                >
+                  Clubs
+                </Link>
+                <Link
+                  href="/teams"
+                  className="rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+                >
+                  Teams
+                </Link>
               </div>
             </div>
 
-            <div className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm">
-              <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-                <div>
-                  <h2 className="text-xl font-semibold text-slate-900">
-                    Activities Calendar
-                  </h2>
-                  <p className="mt-1 text-sm text-slate-500">
-                    Browse activities by date in a clean timeline.
-                  </p>
-                </div>
-
-                <input
-                  type="text"
-                  placeholder="Search events"
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                  className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-[#1e3a8a] focus:ring-2 focus:ring-[#1e3a8a]/10 sm:max-w-sm"
-                />
+            <div className="mt-6 grid gap-3 sm:grid-cols-3">
+              <div className="rounded-lg bg-slate-100 p-4">
+                <p className="text-sm font-medium text-slate-500">Upcoming events</p>
+                <p className="mt-2 text-2xl font-bold text-slate-900">{events.length}</p>
               </div>
-
-              <div className="mt-6 overflow-x-auto">
-                <div className="min-w-max">
-                  <div className="relative px-3 py-6">
-                    <div className="absolute left-0 right-0 top-1/2 h-[2px] -translate-y-1/2 bg-slate-200" />
-
-                    <div className="relative flex items-center gap-8">
-                      {groupedDates.map((group) => {
-                        const isActive = selectedDate === group.key;
-
-                        return (
-                          <button
-                            key={group.key}
-                            onClick={() => setSelectedDate(group.key)}
-                            className="relative flex flex-col items-center text-center"
-                          >
-                            <span
-                              className={`mb-3 text-sm font-semibold ${
-                                isActive ? "text-[#1e3a8a]" : "text-slate-500"
-                              }`}
-                            >
-                              {group.label}
-                            </span>
-
-                            <span
-                              className={`z-10 h-4 w-4 rounded-full border-4 ${
-                                isActive
-                                  ? "border-[#1e3a8a] bg-white"
-                                  : "border-slate-300 bg-white"
-                              }`}
-                            />
-
-                            <span
-                              className={`mt-3 text-xs ${
-                                isActive ? "text-[#1e3a8a]" : "text-slate-400"
-                              }`}
-                            >
-                              {group.items.length}
-                            </span>
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
-                </div>
+              <div className="rounded-lg bg-[#eef3ff] p-4">
+                <p className="text-sm font-medium text-[#1e3a8a]">My teams</p>
+                <p className="mt-2 text-2xl font-bold text-[#1e3a8a]">{myTeams.length}</p>
               </div>
+              <div className="rounded-lg bg-sky-50 p-4">
+                <p className="text-sm font-medium text-sky-700">Open teams</p>
+                <p className="mt-2 text-2xl font-bold text-sky-700">
+                  {availableTeamsCount}
+                </p>
+              </div>
+            </div>
+          </section>
 
-              <div className="mt-4 space-y-4">
-                {selectedEvents.length > 0 ? (
-                  selectedEvents.map((event) => (
-                    <div
-                      key={event.id}
-                      className="rounded-2xl border border-slate-200 p-5 transition hover:border-[#1e3a8a] hover:bg-slate-50"
+          <section className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <h2 className="text-lg font-bold text-slate-950">Profile status</h2>
+                <p className="mt-1 text-sm text-slate-500">
+                  Keep your info ready for event registration and teams.
+                </p>
+              </div>
+              <Link
+                href="/profile"
+                className="rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+              >
+                Edit
+              </Link>
+            </div>
+
+            {profileMissing.length === 0 ? (
+              <p className="mt-5 rounded-lg bg-sky-50 px-4 py-3 text-sm font-semibold text-sky-700">
+                Your profile is complete.
+              </p>
+            ) : (
+              <div className="mt-5">
+                <p className="text-sm text-slate-500">Missing:</p>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {profileMissing.map((field) => (
+                    <span
+                      key={field}
+                      className="rounded-full bg-red-50 px-3 py-1 text-xs font-semibold text-red-600"
                     >
-                      <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
-                        <div className="flex-1">
-                          <span className="rounded-full bg-[#e8eefc] px-3 py-1 text-xs font-semibold text-[#1e3a8a]">
-                            {event.category}
-                          </span>
+                      {field}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+          </section>
+        </div>
 
-                          <h3 className="mt-3 text-lg font-semibold text-slate-900">
-                            {event.title}
-                          </h3>
+        <div className="mt-6 grid gap-6 lg:grid-cols-[1.15fr_0.85fr]">
+          <section className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm">
+            <div className="flex items-center justify-between gap-4">
+              <div>
+                <h2 className="text-xl font-bold text-slate-950">Upcoming events</h2>
+                <p className="mt-1 text-sm text-slate-500">
+                  Events ordered by date.
+                </p>
+              </div>
+              <Link
+                href="/events"
+                className="text-sm font-semibold text-[#1e3a8a] hover:underline"
+              >
+                View all
+              </Link>
+            </div>
 
-                          <p className="mt-2 text-sm leading-6 text-slate-500">
-                            {event.description}
-                          </p>
+            <div className="mt-5 space-y-3">
+              {events.length > 0 ? (
+                events.map((event) => {
+                  const timeLabel =
+                    event.start_time && event.end_time
+                      ? `${formatTime(event.start_time)} - ${formatTime(event.end_time)}`
+                      : formatTime(event.start_time) || "Time not set";
 
-                          <div className="mt-4 flex flex-wrap gap-x-6 gap-y-2 text-sm text-slate-500">
-                            <p>
-                              <span className="font-medium text-slate-700">Date:</span>{" "}
-                              {event.date}
-                            </p>
-                            <p>
-                              <span className="font-medium text-slate-700">Location:</span>{" "}
-                              {event.location}
-                            </p>
+                  return (
+                    <Link
+                      key={event.id}
+                      href={`/events/${event.id}`}
+                      className="block rounded-2xl border border-slate-200 p-4 transition hover:border-[#1e3a8a]/40 hover:bg-slate-50"
+                    >
+                      <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                        <div>
+                          <div className="flex flex-wrap gap-2">
+                            <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700">
+                              {event.category || "Event"}
+                            </span>
+                            <span className="rounded-full border border-[#c7d5fb] bg-[#eef3ff] px-3 py-1 text-xs font-semibold text-[#1e3a8a]">
+                              {event.is_team_based ? "Team based" : "Solo based"}
+                            </span>
                           </div>
+                          <h3 className="mt-3 font-bold text-slate-950">
+                            {event.title || "Untitled event"}
+                          </h3>
+                          <p className="mt-2 line-clamp-2 text-sm leading-6 text-slate-500">
+                            {event.description || "No description added."}
+                          </p>
                         </div>
 
-                        <Link
-                          href="/events"
-                          className="rounded-lg bg-[#1e3a8a] px-4 py-2 text-sm font-semibold text-white transition hover:opacity-90"
-                        >
-                          View
-                        </Link>
+                        <div className="shrink-0 rounded-lg bg-slate-100 px-4 py-3 text-sm text-slate-700">
+                          <p className="font-semibold">{formatDate(event.event_date)}</p>
+                          <p className="mt-1 text-xs text-slate-500">{timeLabel}</p>
+                        </div>
                       </div>
-                    </div>
-                  ))
-                ) : (
-                  <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-8 text-center">
-                    <p className="text-sm text-slate-500">
-                      No activities found.
-                    </p>
-                  </div>
-                )}
-              </div>
+                    </Link>
+                  );
+                })
+              ) : (
+                <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-8 text-center text-sm text-slate-500">
+                  No events yet.
+                </div>
+              )}
             </div>
-          </div>
+          </section>
 
-          <div className="space-y-6 lg:col-span-4">
-            <div className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm">
-              <div className="flex items-start justify-between gap-4">
-                <div className="flex items-center gap-4">
-                  <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-[#e8eefc] text-lg font-bold text-[#1e3a8a]">
-                    {(profile?.full_name?.charAt(0) || "S").toUpperCase()}
-                  </div>
-
-                  <div>
-                    <h2 className="text-lg font-semibold text-slate-900">
-                      {profile?.full_name || "Student User"}
-                    </h2>
-                    <p className="text-sm text-slate-500">
-                      {profile?.major || "Major not added"}
-                    </p>
-                  </div>
-                </div>
-
-                <button
-                  onClick={handleLogout}
-                  className="rounded-xl border border-slate-200 px-3 py-2 text-sm font-medium text-slate-600 transition hover:bg-slate-50"
-                >
-                  Logout
-                </button>
-              </div>
-
-              <div className="mt-5 space-y-3">
-                <div className="rounded-2xl bg-slate-50 p-4">
-                  <p className="text-xs text-slate-400">Student ID</p>
-                  <p className="mt-1 font-medium text-slate-700">
-                    {profile?.student_id || "Not added"}
-                  </p>
-                </div>
-
-                <div className="rounded-2xl bg-slate-50 p-4">
-                  <p className="text-xs text-slate-400">Academic Year</p>
-                  <p className="mt-1 font-medium text-slate-700">
-                    {profile?.academic_year || "Not added"}
-                  </p>
-                </div>
-              </div>
-            </div>
-
-            <div className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm">
-              <div className="flex items-center justify-between">
-                <h3 className="text-lg font-semibold text-slate-900">
-                  Profile
-                </h3>
+          <div className="space-y-6">
+            <section className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm">
+              <div className="flex items-center justify-between gap-4">
+                <h2 className="text-xl font-bold text-slate-950">Clubs</h2>
                 <Link
-                  href="/profile"
-                  className="text-sm font-medium text-[#1e3a8a] hover:underline"
+                  href="/clubs"
+                  className="text-sm font-semibold text-[#1e3a8a] hover:underline"
                 >
-                  Edit
+                  Browse
                 </Link>
               </div>
 
-              {profileMissing.length === 0 ? (
-                <p className="mt-4 text-sm text-green-600">
-                  Your profile is complete.
-                </p>
-              ) : (
-                <>
-                  <p className="mt-4 text-sm text-slate-500">
-                    Complete these sections to improve your account:
-                  </p>
-                  <div className="mt-4 flex flex-wrap gap-2">
-                    {profileMissing.map((field) => (
-                      <span
-                        key={field}
-                        className="rounded-full bg-red-50 px-3 py-1.5 text-xs font-medium text-red-600"
+              <div className="mt-5 space-y-3">
+                {clubs.length > 0 ? (
+                  clubs.map((club) => {
+                    const logo = club.logo_url || club.image_url || "";
+                    const clubName = getClubName(club);
+
+                    return (
+                      <div
+                        key={club.id}
+                        className="flex items-center gap-3 rounded-2xl border border-slate-200 p-3"
                       >
-                        {field}
-                      </span>
-                    ))}
-                  </div>
-                </>
-              )}
-            </div>
-
-            {(profile?.skills?.length || profile?.interests?.length) && (
-              <div className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm">
-                <h3 className="text-lg font-semibold text-slate-900">
-                  Highlights
-                </h3>
-
-                {profile?.skills?.length ? (
-                  <div className="mt-4">
-                    <p className="mb-2 text-sm text-slate-500">Skills</p>
-                    <div className="flex flex-wrap gap-2">
-                      {profile.skills.slice(0, 6).map((skill) => (
-                        <span
-                          key={skill}
-                          className="rounded-full bg-[#eef4ff] px-3 py-1.5 text-xs font-medium text-[#1e3a8a]"
-                        >
-                          {skill}
-                        </span>
-                      ))}
-                    </div>
-                  </div>
-                ) : null}
-
-                {profile?.interests?.length ? (
-                  <div className="mt-4">
-                    <p className="mb-2 text-sm text-slate-500">Interests</p>
-                    <div className="flex flex-wrap gap-2">
-                      {profile.interests.slice(0, 6).map((interest) => (
-                        <span
-                          key={interest}
-                          className="rounded-full bg-[#ecfdf5] px-3 py-1.5 text-xs font-medium text-[#0f766e]"
-                        >
-                          {interest}
-                        </span>
-                      ))}
-                    </div>
-                  </div>
-                ) : null}
+                        {logo ? (
+                          <div
+                            aria-label={`${clubName} logo`}
+                            className="h-12 w-12 shrink-0 rounded-lg border border-slate-200 bg-cover bg-center"
+                            style={{ backgroundImage: `url(${logo})` }}
+                          />
+                        ) : (
+                          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg bg-[#eef3ff] font-bold text-[#1e3a8a]">
+                            {clubName.slice(0, 1).toUpperCase()}
+                          </div>
+                        )}
+                        <div className="min-w-0">
+                          <p className="truncate font-semibold text-slate-900">{clubName}</p>
+                          <p className="text-xs text-slate-500">
+                            {club.category || "Club"}
+                          </p>
+                        </div>
+                      </div>
+                    );
+                  })
+                ) : (
+                  <p className="text-sm text-slate-500">No clubs found.</p>
+                )}
               </div>
-            )}
+            </section>
+
+            <section className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm">
+              <div className="flex items-center justify-between gap-4">
+                <h2 className="text-xl font-bold text-slate-950">Teams</h2>
+                <Link
+                  href="/teams"
+                  className="text-sm font-semibold text-[#1e3a8a] hover:underline"
+                >
+                  Manage
+                </Link>
+              </div>
+
+              <div className="mt-5 space-y-3">
+                {myTeams.length > 0 ? (
+                  myTeams.map((team) => (
+                    <div
+                      key={team.id}
+                      className="rounded-2xl border border-slate-200 p-4"
+                    >
+                      <p className="font-semibold text-slate-950">{team.name}</p>
+                      <p className="mt-1 text-sm text-slate-500">
+                        {team.event || "No event assigned"}
+                      </p>
+                    </div>
+                  ))
+                ) : (
+                  <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-6 text-center">
+                    <p className="text-sm text-slate-500">
+                      You are not in a team yet.
+                    </p>
+                    <Link
+                      href="/teams"
+                      className="mt-3 inline-flex rounded-lg bg-[#1e3a8a] px-4 py-2 text-sm font-semibold text-white"
+                    >
+                      Find teams
+                    </Link>
+                  </div>
+                )}
+              </div>
+            </section>
           </div>
         </div>
       </section>
