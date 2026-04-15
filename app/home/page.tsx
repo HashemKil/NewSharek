@@ -504,46 +504,6 @@ export default function HomePage() {
                 )}
               </div>
             </section>
-
-            <section className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm">
-              <div className="flex items-center justify-between gap-4">
-                <h2 className="text-xl font-bold text-slate-950">Teams</h2>
-                <Link
-                  href="/teams"
-                  className="text-sm font-semibold text-[#1e3a8a] hover:underline"
-                >
-                  Manage
-                </Link>
-              </div>
-
-              <div className="mt-5 space-y-3">
-                {myTeams.length > 0 ? (
-                  myTeams.map((team) => (
-                    <div
-                      key={team.id}
-                      className="rounded-2xl border border-slate-200 p-4"
-                    >
-                      <p className="font-semibold text-slate-950">{team.name}</p>
-                      <p className="mt-1 text-sm text-slate-500">
-                        {team.event || "No event assigned"}
-                      </p>
-                    </div>
-                  ))
-                ) : (
-                  <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-6 text-center">
-                    <p className="text-sm text-slate-500">
-                      You are not in a team yet.
-                    </p>
-                    <Link
-                      href="/teams"
-                      className="mt-3 inline-flex rounded-lg bg-[#1e3a8a] px-4 py-2 text-sm font-semibold text-white"
-                    >
-                      Find teams
-                    </Link>
-                  </div>
-                )}
-              </div>
-            </section>
           </div>
         </div>
       </section>
