@@ -185,17 +185,6 @@ export default function HomePage() {
     return profile?.full_name?.trim().split(" ")[0] || "Student";
   }, [profile?.full_name]);
 
-  const profileMissing = useMemo(() => {
-    const missing = [];
-    if (!profile?.student_id) missing.push("Student ID");
-    if (!profile?.phone_number) missing.push("Phone Number");
-    if (!profile?.major) missing.push("Major");
-    if (!profile?.academic_year) missing.push("Academic Year");
-    if (!profile?.bio) missing.push("Bio");
-    if (!profile?.skills?.length) missing.push("Skills");
-    return missing;
-  }, [profile]);
-
   const myTeams = useMemo(() => {
     const membershipTeams = memberships
       .map(getTeamFromMembership)
@@ -266,44 +255,68 @@ export default function HomePage() {
       <section className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
         <div className="grid gap-6 lg:grid-cols-[1.15fr_0.85fr]">
           <section className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm">
-            <div className="flex flex-col gap-6 md:flex-row md:items-center md:justify-between">
-              <div className="flex items-center gap-4">
-                <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-lg bg-[#eef3ff] text-2xl font-bold text-[#1e3a8a]">
-                  {initials}
-                </div>
-                <div>
-                  <p className="text-sm font-semibold uppercase text-[#1e3a8a]">
-                    Home
-                  </p>
-                  <h1 className="mt-1 text-3xl font-bold text-slate-950">
-                    Welcome back, {firstName}
-                  </h1>
-                  <p className="mt-2 text-sm text-slate-500">
-                    {profile?.major || "Major not added"} ·{" "}
-                    {profile?.academic_year || "Academic year not added"}
-                  </p>
-                </div>
+            <div className="flex flex-col gap-6 md:flex-row md:items-start md:justify-between">
+              <div>
+                <p className="text-sm font-semibold uppercase text-[#1e3a8a]">
+                  PSUT news
+                </p>
+                <h1 className="mt-1 text-3xl font-bold text-slate-950">
+                  Stay close to what is happening on campus
+                </h1>
+                <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-500">
+                  Follow university announcements, student activities, and club updates in one place.
+                </p>
               </div>
+              <span className="rounded-full bg-[#eef3ff] px-3 py-1 text-xs font-semibold text-[#1e3a8a]">
+                Latest
+              </span>
 
-              <div className="flex flex-wrap gap-2">
-                <Link
-                  href="/events"
-                  className="rounded-lg bg-[#1e3a8a] px-4 py-2.5 text-sm font-semibold text-white transition hover:opacity-90"
-                >
-                  Events
-                </Link>
-                <Link
-                  href="/clubs"
-                  className="rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
-                >
-                  Clubs
-                </Link>
-                <Link
-                  href="/teams"
-                  className="rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
-                >
-                  Teams
-                </Link>
+            </div>
+
+            <div className="mt-6 grid gap-3 md:grid-cols-3">
+              <div className="rounded-lg bg-slate-100 p-4">
+                <p className="text-sm font-semibold text-slate-900">
+                  Student activities
+                </p>
+                <p className="mt-2 text-sm leading-6 text-slate-500">
+                  New events and workshops will appear as clubs publish them.
+                </p>
+              </div>
+              <div className="rounded-lg bg-[#eef3ff] p-4">
+                <p className="text-sm font-semibold text-[#1e3a8a]">
+                  Club updates
+                </p>
+                <p className="mt-2 text-sm leading-6 text-slate-600">
+                  Check the Clubs page for active groups and announcements.
+                </p>
+              </div>
+              <div className="rounded-lg bg-sky-50 p-4">
+                <p className="text-sm font-semibold text-sky-700">
+                  Team notices
+                </p>
+                <p className="mt-2 text-sm leading-6 text-slate-600">
+                  Team requests and member changes are managed from Teams.
+                </p>
+              </div>
+            </div>
+          </section>
+
+          <section className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm">
+            <div className="flex items-center gap-4">
+              <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-lg bg-[#eef3ff] text-2xl font-bold text-[#1e3a8a]">
+                {initials}
+              </div>
+              <div>
+                <p className="text-sm font-semibold uppercase text-[#1e3a8a]">
+                  Home
+                </p>
+                <h2 className="mt-1 text-2xl font-bold text-slate-950">
+                  Welcome back, {firstName}
+                </h2>
+                <p className="mt-2 text-sm text-slate-500">
+                  {profile?.major || "Major not added"} -{" "}
+                  {profile?.academic_year || "Academic year not added"}
+                </p>
               </div>
             </div>
 
@@ -323,43 +336,6 @@ export default function HomePage() {
                 </p>
               </div>
             </div>
-          </section>
-
-          <section className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm">
-            <div className="flex items-start justify-between gap-4">
-              <div>
-                <h2 className="text-lg font-bold text-slate-950">Profile status</h2>
-                <p className="mt-1 text-sm text-slate-500">
-                  Keep your info ready for event registration and teams.
-                </p>
-              </div>
-              <Link
-                href="/profile"
-                className="rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
-              >
-                Edit
-              </Link>
-            </div>
-
-            {profileMissing.length === 0 ? (
-              <p className="mt-5 rounded-lg bg-sky-50 px-4 py-3 text-sm font-semibold text-sky-700">
-                Your profile is complete.
-              </p>
-            ) : (
-              <div className="mt-5">
-                <p className="text-sm text-slate-500">Missing:</p>
-                <div className="mt-3 flex flex-wrap gap-2">
-                  {profileMissing.map((field) => (
-                    <span
-                      key={field}
-                      className="rounded-full bg-red-50 px-3 py-1 text-xs font-semibold text-red-600"
-                    >
-                      {field}
-                    </span>
-                  ))}
-                </div>
-              </div>
-            )}
           </section>
         </div>
 
