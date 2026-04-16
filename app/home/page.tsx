@@ -172,7 +172,7 @@ export default function HomePage() {
               .from("event_registrations")
               .select("event_id")
               .eq("user_id", user.id),
-            supabase.from("clubs").select("*").limit(6),
+            supabase.from("clubs").select("*").limit(8),
             supabase.from("teams").select("*").order("created_at", { ascending: false }).limit(6),
             supabase
               .from("team_members")
@@ -456,8 +456,8 @@ export default function HomePage() {
             </div>
           </section>
 
-          <div className="space-y-6">
-            <section className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm">
+          <div className="h-full">
+            <section className="min-h-[520px] rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm">
               <div className="flex items-center justify-between gap-4">
                 <h2 className="text-xl font-bold text-slate-950">Clubs</h2>
                 <Link
@@ -468,7 +468,7 @@ export default function HomePage() {
                 </Link>
               </div>
 
-              <div className="mt-5 space-y-3">
+              <div className="mt-5 space-y-4">
                 {clubs.length > 0 ? (
                   clubs.map((club) => {
                     const logo = club.logo_url || club.image_url || "";
@@ -477,7 +477,7 @@ export default function HomePage() {
                     return (
                       <div
                         key={club.id}
-                        className="flex items-center gap-3 rounded-2xl border border-slate-200 p-3"
+                        className="flex items-center gap-4 rounded-2xl border border-slate-200 p-4"
                       >
                         {logo ? (
                           <div
