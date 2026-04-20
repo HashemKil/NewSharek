@@ -62,10 +62,11 @@ type NormalizedEvent = EventItem & {
   parsedDate: Date | null;
 };
 
-type TimelineEvent = NormalizedEvent & {
+type TimelineDay = {
+  rawDateKey: string;
   day: number;
   leftPercent: number;
-  stackIndex: number;
+  eventCount: number;
 };
 
 type TeamMembershipRow = {
@@ -631,48 +632,51 @@ export default function EventsPage() {
     });
   }, [currentMonth]);
 
-  const timelineEvents = useMemo<TimelineEvent[]>(() => {
-    const dayCounts = new Map<string, number>();
+  const timelineDays = useMemo<TimelineDay[]>(() => {
+    const daysByKey = new Map<string, TimelineDay>();
 
-    return monthEvents.map((event) => {
+    monthEvents.forEach((event) => {
       const day = event.parsedDate?.getDate() ?? 1;
       const leftPercent =
         daysInCurrentMonth <= 1
           ? 0
           : ((day - 1) / (daysInCurrentMonth - 1)) * 100;
+      const existingDay = daysByKey.get(event.rawDateKey);
 
-      const key = event.rawDateKey;
-      const stackIndex = dayCounts.get(key) ?? 0;
-      dayCounts.set(key, stackIndex + 1);
-
-      return {
-        ...event,
-        day,
-        leftPercent,
-        stackIndex,
-      };
+      if (existingDay) {
+        existingDay.eventCount += 1;
+      } else {
+        daysByKey.set(event.rawDateKey, {
+          rawDateKey: event.rawDateKey,
+          day,
+          leftPercent,
+          eventCount: 1,
+        });
+      }
     });
+
+    return Array.from(daysByKey.values()).sort((a, b) => a.day - b.day);
   }, [monthEvents, daysInCurrentMonth]);
 
   useEffect(() => {
-    if (timelineEvents.length === 0) {
+    if (timelineDays.length === 0) {
       setSelectedDateKey("");
       return;
     }
 
-    const exists = timelineEvents.some(
-      (event) => event.rawDateKey === selectedDateKey
+    const exists = timelineDays.some(
+      (day) => day.rawDateKey === selectedDateKey
     );
 
     if (!selectedDateKey || !exists) {
-      setSelectedDateKey(timelineEvents[0].rawDateKey);
+      setSelectedDateKey(timelineDays[0].rawDateKey);
     }
-  }, [timelineEvents, selectedDateKey]);
+  }, [timelineDays, selectedDateKey]);
 
   const selectedEvents = useMemo(() => {
     if (!selectedDateKey) return [];
-    return timelineEvents.filter((event) => event.rawDateKey === selectedDateKey);
-  }, [timelineEvents, selectedDateKey]);
+    return monthEvents.filter((event) => event.rawDateKey === selectedDateKey);
+  }, [monthEvents, selectedDateKey]);
 
   const currentMonthIndex = useMemo(() => {
     return availableMonths.findIndex(
@@ -902,7 +906,8 @@ export default function EventsPage() {
                 <div className="text-center">
                   <p className="text-lg font-semibold text-slate-900">{monthLabel}</p>
                   <p className="text-sm text-slate-500">
-                    {timelineEvents.length} event{timelineEvents.length !== 1 ? "s" : ""}
+                    {monthEvents.length} event{monthEvents.length !== 1 ? "s" : ""} on{" "}
+                    {timelineDays.length} day{timelineDays.length !== 1 ? "s" : ""}
                   </p>
                 </div>
 
@@ -944,35 +949,44 @@ export default function EventsPage() {
                     );
                   })}
 
-                  {timelineEvents.map((event) => {
-                    const isActive = selectedDateKey === event.rawDateKey;
-                    const verticalOffset = event.stackIndex * 16;
+                  {timelineDays.map((day) => {
+                    const isActive = selectedDateKey === day.rawDateKey;
 
                     return (
                       <button
-                        key={event.id}
-                        onClick={() => setSelectedDateKey(event.rawDateKey)}
+                        key={day.rawDateKey}
+                        onClick={() => setSelectedDateKey(day.rawDateKey)}
                         className="absolute -translate-x-1/2"
                         style={{
-                          left: `${event.leftPercent}%`,
-                          top: `${56 - verticalOffset}px`,
+                          left: `${day.leftPercent}%`,
+                          top: "56px",
                         }}
+                        title={`${day.eventCount} event${
+                          day.eventCount !== 1 ? "s" : ""
+                        } on this day`}
                       >
                         <div className="flex flex-col items-center">
-                          <div
-                            className={`h-5 w-5 rounded-full border-4 shadow-sm transition ${
-                              isActive
-                                ? "border-[#1e3a8a] bg-white"
-                                : "border-slate-300 bg-white hover:border-[#1e3a8a]"
-                            }`}
-                          />
+                          <div className="relative">
+                            <div
+                              className={`h-5 w-5 rounded-full border-4 shadow-sm transition ${
+                                isActive
+                                  ? "border-[#1e3a8a] bg-white"
+                                  : "border-slate-300 bg-white hover:border-[#1e3a8a]"
+                              }`}
+                            />
+                            {day.eventCount > 1 && (
+                              <span className="absolute -right-3 -top-3 flex h-5 min-w-5 items-center justify-center rounded-full bg-[#1e3a8a] px-1 text-[10px] font-bold text-white shadow-sm">
+                                {day.eventCount}
+                              </span>
+                            )}
+                          </div>
 
                           <span
                             className={`mt-2 block max-w-[90px] truncate text-center text-xs font-medium ${
                               isActive ? "text-[#1e3a8a]" : "text-slate-500"
                             }`}
                           >
-                            {event.day}
+                            {day.day}
                           </span>
                         </div>
                       </button>
