@@ -239,20 +239,16 @@ export default function ClubsPage() {
     setClubActionId(clubId);
     setError("");
 
-    let { error: joinError } = await supabase.rpc("join_club", {
+    const { error: joinError } = await supabase.rpc("join_club", {
       target_club_id: clubId,
     });
 
-    if (joinError?.message?.toLowerCase().includes("schema cache")) {
-      const fallback = await supabase.from("club_members").insert({
-        club_id: clubId,
-        user_id: userId,
-      });
-      joinError = fallback.error;
-    }
-
     if (joinError) {
-      setError(joinError.message);
+      setError(
+        joinError.message.toLowerCase().includes("schema cache")
+          ? "Club joining is not ready in Supabase yet. Run the latest club_members SQL and reload the schema."
+          : joinError.message
+      );
     } else {
       setJoinedClubIds((current) =>
         current.includes(clubId) ? current : [...current, clubId]
@@ -268,21 +264,16 @@ export default function ClubsPage() {
     setClubActionId(clubId);
     setError("");
 
-    let { error: leaveError } = await supabase.rpc("leave_club", {
+    const { error: leaveError } = await supabase.rpc("leave_club", {
       target_club_id: clubId,
     });
 
-    if (leaveError?.message?.toLowerCase().includes("schema cache")) {
-      const fallback = await supabase
-        .from("club_members")
-        .delete()
-        .eq("club_id", clubId)
-        .eq("user_id", userId);
-      leaveError = fallback.error;
-    }
-
     if (leaveError) {
-      setError(leaveError.message);
+      setError(
+        leaveError.message.toLowerCase().includes("schema cache")
+          ? "Club leaving is not ready in Supabase yet. Run the latest club_members SQL and reload the schema."
+          : leaveError.message
+      );
     } else {
       setJoinedClubIds((current) => current.filter((id) => id !== clubId));
     }
