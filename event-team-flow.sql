@@ -291,6 +291,22 @@ $$;
 grant execute on function public.join_club(uuid) to authenticated;
 grant execute on function public.leave_club(uuid) to authenticated;
 
+create or replace function public.get_club_member_counts()
+returns table (
+  club_id uuid,
+  member_count bigint
+)
+language sql
+security definer
+set search_path = public
+as $$
+  select club_members.club_id, count(*) as member_count
+  from public.club_members
+  group by club_members.club_id;
+$$;
+
+grant execute on function public.get_club_member_counts() to authenticated;
+
 notify pgrst, 'reload schema';
 
 drop policy if exists "Users can create their own teams" on public.teams;

@@ -34,9 +34,15 @@ type ClubMemberRow = {
   club_id: string;
 };
 
+type ClubMemberCountRow = {
+  club_id: string;
+  member_count: number;
+};
+
 type Club = ClubRow & {
   displayName: string;
   eventCount: number;
+  memberCount: number;
   upcomingEvents: EventRow[];
 };
 
@@ -143,12 +149,14 @@ export default function ClubsPage() {
 
         setUserId(user.id);
 
-        const [clubsResult, eventsResult, membershipsResult] = await Promise.all([
+        const [clubsResult, eventsResult, membershipsResult, memberCountsResult] =
+          await Promise.all([
           supabase.from("clubs").select("*"),
           supabase
             .from("events")
             .select("id, title, category, club_id, event_date"),
           supabase.from("club_members").select("club_id").eq("user_id", user.id),
+          supabase.rpc("get_club_member_counts"),
         ]);
 
         if (clubsResult.error) {
@@ -169,6 +177,13 @@ export default function ClubsPage() {
           return aDate.localeCompare(bDate);
         });
 
+        const memberCountByClubId = new Map(
+          ((memberCountsResult.data || []) as ClubMemberCountRow[]).map((count) => [
+            count.club_id,
+            count.member_count,
+          ])
+        );
+
         const loadedClubs = ((clubsResult.data || []) as ClubRow[])
           .map((club) => {
             const relatedEvents = eventRows.filter(
@@ -179,6 +194,7 @@ export default function ClubsPage() {
               ...club,
               displayName: getClubName(club),
               eventCount: relatedEvents.length,
+              memberCount: memberCountByClubId.get(club.id) ?? 0,
               upcomingEvents: relatedEvents.slice(0, 3),
             };
           })
@@ -233,6 +249,16 @@ export default function ClubsPage() {
     setSelectedCategory("All Clubs");
   };
 
+  const updateClubMemberCount = (clubId: string, change: number) => {
+    setClubs((current) =>
+      current.map((club) =>
+        club.id === clubId
+          ? { ...club, memberCount: Math.max(club.memberCount + change, 0) }
+          : club
+      )
+    );
+  };
+
   const handleJoinClub = async (clubId: string) => {
     if (!userId) return;
 
@@ -253,6 +279,7 @@ export default function ClubsPage() {
       setJoinedClubIds((current) =>
         current.includes(clubId) ? current : [...current, clubId]
       );
+      updateClubMemberCount(clubId, 1);
     }
 
     setClubActionId("");
@@ -276,6 +303,7 @@ export default function ClubsPage() {
       );
     } else {
       setJoinedClubIds((current) => current.filter((id) => id !== clubId));
+      updateClubMemberCount(clubId, -1);
     }
 
     setClubActionId("");
@@ -394,6 +422,9 @@ export default function ClubsPage() {
                             </span>
                             <span className="rounded-full border border-sky-200 bg-sky-50 px-3 py-1 text-xs font-semibold text-sky-700">
                               {club.eventCount} event{club.eventCount !== 1 ? "s" : ""}
+                            </span>
+                            <span className="rounded-full border border-[#c7d5fb] bg-[#eef3ff] px-3 py-1 text-xs font-semibold text-[#1e3a8a]">
+                              {club.memberCount} member{club.memberCount !== 1 ? "s" : ""}
                             </span>
                           </div>
 
