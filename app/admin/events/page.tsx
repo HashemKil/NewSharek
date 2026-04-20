@@ -15,6 +15,7 @@ type AdminEvent = {
   approval_status: string | null;
   created_at: string | null;
   source_url: string | null;
+  is_club_members_only: boolean | null;
 };
 
 type EditableFields = {
@@ -23,6 +24,7 @@ type EditableFields = {
   category: string;
   event_date: string;
   location: string;
+  is_club_members_only: boolean;
 };
 
 type Registrant = {
@@ -66,6 +68,7 @@ const MOCK_EVENTS: AdminEvent[] = [
     approval_status: "pending",
     created_at: new Date().toISOString(),
     source_url: "https://example.com/hackathon-2025",
+    is_club_members_only: false,
   },
   {
     id: "__mock_2",
@@ -78,6 +81,7 @@ const MOCK_EVENTS: AdminEvent[] = [
     approval_status: "pending",
     created_at: new Date().toISOString(),
     source_url: null,
+    is_club_members_only: false,
   },
 ];
 
@@ -239,6 +243,11 @@ function PendingCard({
         {/* Pills row */}
         <div className="flex flex-wrap items-center gap-2">
           <CategoryPill category={event.category} />
+          {event.is_club_members_only && (
+            <span className="rounded-full bg-amber-50 px-2.5 py-0.5 text-xs font-medium text-amber-700 ring-1 ring-inset ring-amber-200">
+              Club members only
+            </span>
+          )}
           {countdown && (
             <span className="rounded-full bg-amber-50 px-2.5 py-0.5 text-xs font-medium text-amber-700 ring-1 ring-inset ring-amber-200">
               {countdown}
@@ -328,6 +337,11 @@ function ActiveCard({
         {/* Pills row */}
         <div className="flex flex-wrap items-center gap-2">
           <CategoryPill category={event.category} />
+          {event.is_club_members_only && (
+            <span className="rounded-full bg-amber-50 px-2.5 py-0.5 text-xs font-medium text-amber-700 ring-1 ring-inset ring-amber-200">
+              Club members only
+            </span>
+          )}
           {upcoming && countdown && (
             <span className="rounded-full bg-emerald-50 px-2.5 py-0.5 text-xs font-medium text-emerald-700 ring-1 ring-inset ring-emerald-200">
               {countdown}
@@ -407,6 +421,7 @@ function PendingModal({
     category: event.category ?? "",
     event_date: event.event_date ? event.event_date.slice(0, 10) : "",
     location: event.location ?? "",
+    is_club_members_only: Boolean(event.is_club_members_only),
   });
   const [saving, setSaving] = useState(false);
   const [approving, setApproving] = useState(false);
@@ -432,6 +447,7 @@ function PendingModal({
         category: edit.category || null,
         event_date: edit.event_date || null,
         location: edit.location || null,
+        is_club_members_only: edit.is_club_members_only,
       })
       .eq("id", event.id);
 
@@ -440,7 +456,15 @@ function PendingModal({
     } else {
       setSaveSuccess("Changes saved.");
       setTimeout(() => setSaveSuccess(""), 3000);
-      onUpdated({ ...event, ...edit, category: edit.category || null, description: edit.description || null, event_date: edit.event_date || null, location: edit.location || null });
+      onUpdated({
+        ...event,
+        ...edit,
+        category: edit.category || null,
+        description: edit.description || null,
+        event_date: edit.event_date || null,
+        location: edit.location || null,
+        is_club_members_only: edit.is_club_members_only,
+      });
     }
     setSaving(false);
   };
@@ -494,6 +518,11 @@ function PendingModal({
           )}
           <div className="flex flex-wrap items-center gap-2">
             <CategoryPill category={event.category} />
+            {event.is_club_members_only && (
+              <span className="rounded-full bg-amber-50 px-2.5 py-0.5 text-xs font-medium text-amber-700 ring-1 ring-inset ring-amber-200">
+                Club members only
+              </span>
+            )}
             <StatusBadge status="pending" />
           </div>
           <h2 className="text-base font-bold text-slate-900">{event.title}</h2>
@@ -544,6 +573,27 @@ function PendingModal({
               <Label>Location</Label>
               <input type="text" value={edit.location} onChange={(e) => setEdit({ ...edit, location: e.target.value })} placeholder="e.g. Room 101, Main Building" className={inputCls} />
             </div>
+            <label className="sm:col-span-2 flex items-start gap-3 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+              <input
+                type="checkbox"
+                checked={edit.is_club_members_only}
+                onChange={(e) =>
+                  setEdit({
+                    ...edit,
+                    is_club_members_only: e.target.checked,
+                  })
+                }
+                className="mt-1 h-4 w-4 rounded border-slate-300"
+              />
+              <span>
+                <span className="block text-sm font-semibold text-slate-800">
+                  Club members only
+                </span>
+                <span className="mt-1 block text-xs leading-5 text-slate-500">
+                  Only students who joined the responsible club can register.
+                </span>
+              </span>
+            </label>
             <div className="sm:col-span-2">
               <Label>Description</Label>
               <textarea rows={4} value={edit.description} onChange={(e) => setEdit({ ...edit, description: e.target.value })} placeholder="Event description…" className={`${inputCls} resize-none`} />
@@ -982,17 +1032,30 @@ export default function AdminEventsPage() {
   const loadEvents = async () => {
     setLoading(true);
     setError("");
+    const baseSelect =
+      "id, title, description, category, event_date, location, approval_status, created_at, source_url";
     const { data, error: fetchError } = await supabase
       .from("events")
-      .select("id, title, description, category, event_date, location, approval_status, created_at, source_url")
+      .select(`${baseSelect}, is_club_members_only`)
       .order("created_at", { ascending: false });
 
-    if (fetchError) setError(fetchError.message);
-    else setEvents(data ?? []);
+    if (fetchError) {
+      const { data: fallbackData, error: fallbackError } = await supabase
+        .from("events")
+        .select(baseSelect)
+        .order("created_at", { ascending: false });
+
+      if (fallbackError) setError(fallbackError.message);
+      else setEvents((fallbackData ?? []) as AdminEvent[]);
+    } else {
+      setEvents(data ?? []);
+    }
     setLoading(false);
   };
 
-  useEffect(() => { loadEvents(); }, []);
+  useEffect(() => {
+    void Promise.resolve().then(loadEvents);
+  }, []);
 
   const pendingEvents = useMemo(
     () => events.filter((e) => (e.approval_status ?? "pending") === "pending" || e.approval_status === "rejected"),

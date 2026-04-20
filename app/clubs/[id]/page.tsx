@@ -31,6 +31,7 @@ type EventRow = {
   end_time?: string | null;
   location?: string | null;
   is_team_based?: boolean | null;
+  is_club_members_only?: boolean | null;
 };
 
 type ClubMemberCountRow = {
@@ -103,16 +104,9 @@ export default function ClubDetailsPage() {
 
         setUserId(user.id);
 
-        const [clubResult, eventsResult, membershipResult, memberCountsResult] =
+        const [clubResult, membershipResult, memberCountsResult] =
           await Promise.all([
             supabase.from("clubs").select("*").eq("id", clubId).single(),
-            supabase
-              .from("events")
-              .select(
-                "id, title, category, description, event_date, start_time, end_time, location, is_team_based"
-              )
-              .eq("club_id", clubId)
-              .order("event_date", { ascending: true }),
             supabase
               .from("club_members")
               .select("club_id")
@@ -126,13 +120,35 @@ export default function ClubDetailsPage() {
           return;
         }
 
+        const eventSelect =
+          "id, title, category, description, event_date, start_time, end_time, location, is_team_based";
+        const eventsResult = await supabase
+          .from("events")
+          .select(`${eventSelect}, is_club_members_only`)
+          .eq("club_id", clubId)
+          .order("event_date", { ascending: true });
+
+        let eventsData: unknown = eventsResult.data;
+        let eventsError = eventsResult.error;
+
         if (eventsResult.error) {
-          setError(eventsResult.error.message);
+          const fallbackEventsResult = await supabase
+            .from("events")
+            .select(eventSelect)
+            .eq("club_id", clubId)
+            .order("event_date", { ascending: true });
+
+          eventsData = fallbackEventsResult.data;
+          eventsError = fallbackEventsResult.error;
+        }
+
+        if (eventsError) {
+          setError(eventsError.message);
           return;
         }
 
         setClub(clubResult.data as ClubRow);
-        setEvents(((eventsResult.data || []) as EventRow[]).filter(Boolean));
+        setEvents(((eventsData || []) as EventRow[]).filter(Boolean));
 
         if (membershipResult.error) {
           console.error("CLUB MEMBERSHIP LOAD ERROR:", membershipResult.error);
@@ -384,6 +400,11 @@ export default function ClubDetailsPage() {
                           <span className="rounded-full border border-[#c7d5fb] bg-[#eef3ff] px-3 py-1 text-xs font-semibold text-[#1e3a8a]">
                             {event.is_team_based ? "Team based" : "Solo based"}
                           </span>
+                          {event.is_club_members_only && (
+                            <span className="rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-700">
+                              Club members only
+                            </span>
+                          )}
                         </div>
                         <h3 className="mt-3 font-bold text-slate-950">
                           {event.title || "Untitled event"}

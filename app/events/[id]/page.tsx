@@ -23,6 +23,7 @@ type EventRow = {
   approval_status?: string | null;
   is_team_based?: boolean | null;
   is_university_event?: boolean | null;
+  is_club_members_only?: boolean | null;
 };
 
 type Profile = {
@@ -93,6 +94,7 @@ export default function EventDetailsPage() {
   const [currentEventTeamName, setCurrentEventTeamName] = useState("");
   const [statusClock, setStatusClock] = useState(0);
   const [isRegistered, setIsRegistered] = useState(false);
+  const [isResponsibleClubMember, setIsResponsibleClubMember] = useState(false);
   const [responsibleClub, setResponsibleClub] = useState<ClubRow | null>(null);
 
   const [teamName, setTeamName] = useState("");
@@ -104,6 +106,9 @@ export default function EventDetailsPage() {
 
   const eventDate = event?.event_date ?? event?.date ?? null;
   const isTeamBased = Boolean(event?.is_team_based);
+  const isClubMembersOnly = Boolean(event?.is_club_members_only);
+  const isLockedClubEvent =
+    isClubMembersOnly && Boolean(event?.club_id) && !isResponsibleClubMember;
   const eventTypeLabel = isTeamBased ? "Team based" : "Solo based";
   const responsibleClubName =
     responsibleClub?.name?.trim() ||
@@ -270,6 +275,19 @@ export default function EventDetailsPage() {
         setResponsibleClub(null);
       }
 
+      if (loadedEvent.is_club_members_only && loadedEvent.club_id) {
+        const { data: clubMembership } = await supabase
+          .from("club_members")
+          .select("club_id")
+          .eq("club_id", loadedEvent.club_id)
+          .eq("user_id", user.id)
+          .maybeSingle();
+
+        setIsResponsibleClubMember(Boolean(clubMembership));
+      } else {
+        setIsResponsibleClubMember(false);
+      }
+
       const { data: registrationData } = await supabase
         .from("event_registrations")
         .select("id")
@@ -373,6 +391,11 @@ export default function EventDetailsPage() {
 
     if (isCompleted) {
       setError("This event is completed. Registration is closed.");
+      return false;
+    }
+
+    if (isLockedClubEvent) {
+      setError("Only members of this club can join this event.");
       return false;
     }
 
@@ -748,6 +771,11 @@ export default function EventDetailsPage() {
                       {responsibleClubName}
                     </span>
                   )}
+                  {isClubMembersOnly && (
+                    <span className="rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-700">
+                      Club members only
+                    </span>
+                  )}
                   <span
                     className={`rounded-full border px-3 py-1 text-xs font-semibold ${getStatusBadge(
                       eventStatus
@@ -834,6 +862,12 @@ export default function EventDetailsPage() {
                       This event is completed. Team requests are closed.
                     </p>
                   )}
+                  {isLockedClubEvent && (
+                    <p className="mt-3 rounded-lg bg-amber-50 px-4 py-3 text-sm font-medium text-amber-700">
+                      Only members of the responsible club can join or create
+                      teams for this event.
+                    </p>
+                  )}
                   {currentEventTeamName && (
                     <p className="mt-3 rounded-lg bg-[#eef3ff] px-4 py-3 text-sm font-medium text-[#1e3a8a]">
                       You are already in {currentEventTeamName} for this event.
@@ -883,20 +917,24 @@ export default function EventDetailsPage() {
                     {isRegistered ? "You are registered" : "Join this event"}
                   </h2>
                   <p className="mt-2 text-sm leading-6 text-slate-500">
-                    {isRegistered
+                    {isLockedClubEvent
+                      ? "You need to join the responsible club before registering for this event."
+                      : isRegistered
                       ? "You can leave this event if you no longer want to participate."
                       : "Your name, email, student ID, major, and academic year will be copied from your profile into the event registration."}
                   </p>
                   <button
                     type="button"
                     onClick={isRegistered ? handleLeaveEvent : handleJoinEvent}
-                    disabled={saving || isCompleted}
+                    disabled={saving || isCompleted || isLockedClubEvent}
                     className={`mt-5 rounded-lg px-5 py-3 text-sm font-semibold text-white hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60 ${
                       isRegistered ? "bg-red-600" : "bg-[#1e3a8a]"
                     }`}
                   >
                     {isCompleted
                       ? "Completed"
+                      : isLockedClubEvent
+                      ? "Club members only"
                       : saving
                       ? isRegistered
                         ? "Leaving..."
@@ -990,12 +1028,15 @@ export default function EventDetailsPage() {
                       (Boolean(currentEventTeamName) &&
                         selectedTeam.currentUserMemberStatus !== "pending") ||
                       selectedTeam.memberCount >= TEAM_MEMBER_LIMIT ||
-                      isCompleted
+                      isCompleted ||
+                      isLockedClubEvent
                     }
                     className="mt-5 w-full rounded-lg bg-[#1e3a8a] px-5 py-3 text-sm font-semibold text-white hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
                   >
                     {isCompleted
                       ? "Completed"
+                      : isLockedClubEvent
+                      ? "Club members only"
                       : selectedTeam.currentUserMemberStatus === "pending"
                       ? saving
                         ? "Cancelling..."
@@ -1022,7 +1063,9 @@ export default function EventDetailsPage() {
                     Create your own team
                   </h2>
                   <p className="mt-2 text-sm text-slate-500">
-                    You will be the team owner and first member.
+                    {isLockedClubEvent
+                      ? "Join the responsible club before creating a team."
+                      : "You will be the team owner and first member."}
                   </p>
                   <div className="mt-4 space-y-3">
                     <input
@@ -1114,11 +1157,18 @@ export default function EventDetailsPage() {
                   </div>
                   <button
                     type="submit"
-                    disabled={saving || Boolean(currentEventTeamName) || isCompleted}
+                    disabled={
+                      saving ||
+                      Boolean(currentEventTeamName) ||
+                      isCompleted ||
+                      isLockedClubEvent
+                    }
                     className="mt-4 w-full rounded-lg bg-[#1e3a8a] px-5 py-3 text-sm font-semibold text-white hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
                   >
                     {isCompleted
                       ? "Completed"
+                      : isLockedClubEvent
+                      ? "Club members only"
                       : currentEventTeamName
                       ? "Already in a team"
                       : saving

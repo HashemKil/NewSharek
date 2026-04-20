@@ -4,6 +4,9 @@ add column if not exists is_team_based boolean not null default false;
 alter table public.events
 add column if not exists is_university_event boolean not null default false;
 
+alter table public.events
+add column if not exists is_club_members_only boolean not null default false;
+
 alter table public.profiles
 add column if not exists phone_number text;
 
@@ -365,6 +368,53 @@ drop trigger if exists sync_event_registered_count_delete on public.event_regist
 create trigger sync_event_registered_count_delete
 after delete on public.event_registrations
 for each row execute function public.sync_event_registered_count();
+
+create or replace function public.enforce_club_member_event_registration()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  target_event public.events%rowtype;
+begin
+  select *
+  into target_event
+  from public.events
+  where id = new.event_id;
+
+  if not found then
+    raise exception 'Event not found.';
+  end if;
+
+  if target_event.is_club_members_only then
+    if target_event.club_id is null then
+      raise exception 'This members-only event is not linked to a club.';
+    end if;
+
+    if not exists (
+      select 1
+      from public.club_members
+      where club_members.club_id = target_event.club_id
+        and club_members.user_id = new.user_id
+    ) then
+      raise exception 'Only members of this club can join this event.';
+    end if;
+  end if;
+
+  return new;
+end;
+$$;
+
+drop trigger if exists enforce_club_member_event_registration_insert on public.event_registrations;
+create trigger enforce_club_member_event_registration_insert
+before insert on public.event_registrations
+for each row execute function public.enforce_club_member_event_registration();
+
+drop trigger if exists enforce_club_member_event_registration_update on public.event_registrations;
+create trigger enforce_club_member_event_registration_update
+before update on public.event_registrations
+for each row execute function public.enforce_club_member_event_registration();
 
 create or replace function public.enforce_team_member_limit()
 returns trigger

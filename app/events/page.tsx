@@ -22,6 +22,7 @@ type EventRow = {
   computed_status?: "upcoming" | "ongoing" | "completed" | null;
   is_team_based?: boolean | null;
   is_university_event?: boolean | null;
+  is_club_members_only?: boolean | null;
   responsible_club?: string | null;
 };
 
@@ -41,6 +42,7 @@ type EventItem = {
   computed_status?: "upcoming" | "ongoing" | "completed";
   is_team_based: boolean;
   is_university_event: boolean;
+  is_club_members_only: boolean;
   responsible_club: string | null;
 };
 
@@ -67,13 +69,17 @@ type TeamMembershipRow = {
 
 type EventTypeRow = Pick<
   EventRow,
-  "id" | "is_team_based" | "is_university_event" | "club_id"
+  "id" | "is_team_based" | "is_university_event" | "is_club_members_only" | "club_id"
 >;
 
 type ClubRow = {
   id: string;
   name?: string | null;
   title?: string | null;
+};
+
+type ClubMemberRow = {
+  club_id: string;
 };
 
 const getClubName = (club: ClubRow) =>
@@ -107,6 +113,7 @@ export default function EventsPage() {
   const [selectedDateKey, setSelectedDateKey] = useState("");
   const [jumpToDate, setJumpToDate] = useState("");
   const [joinedEvents, setJoinedEvents] = useState<string[]>([]);
+  const [joinedClubIds, setJoinedClubIds] = useState<string[]>([]);
   const [statusClock, setStatusClock] = useState(0);
 
   const today = useMemo(() => {
@@ -140,6 +147,7 @@ export default function EventsPage() {
       computed_status: row.computed_status ?? undefined,
       is_team_based: Boolean(row.is_team_based),
       is_university_event: Boolean(row.is_university_event),
+      is_club_members_only: Boolean(row.is_club_members_only),
       responsible_club: row.responsible_club ?? null,
     };
   };
@@ -201,7 +209,7 @@ export default function EventsPage() {
           const eventIds = (viewData as EventRow[]).map((event) => event.id);
           const { data: typeData } = await supabase
             .from("events")
-            .select("id, is_team_based, is_university_event, club_id")
+            .select("id, is_team_based, is_university_event, is_club_members_only, club_id")
             .in("id", eventIds);
 
           const typeByEventId = new Map(
@@ -220,6 +228,9 @@ export default function EventsPage() {
               is_university_event:
                 typeByEventId.get(event.id)?.is_university_event ??
                 event.is_university_event,
+              is_club_members_only:
+                typeByEventId.get(event.id)?.is_club_members_only ??
+                event.is_club_members_only,
               club_id: typeByEventId.get(event.id)?.club_id ?? event.club_id,
             })
           );
@@ -266,6 +277,7 @@ export default function EventsPage() {
 
     if (!user) {
       setJoinedEvents([]);
+      setJoinedClubIds([]);
       return;
     }
 
@@ -303,6 +315,17 @@ export default function EventsPage() {
     });
 
     setJoinedEvents(Array.from(joined));
+
+    const { data: clubMemberships } = await supabase
+      .from("club_members")
+      .select("club_id")
+      .eq("user_id", user.id);
+
+    setJoinedClubIds(
+      ((clubMemberships || []) as ClubMemberRow[]).map(
+        (membership) => membership.club_id
+      )
+    );
   };
 
   const handleJoinToggle = (eventId: string) => {
@@ -931,6 +954,10 @@ export default function EventsPage() {
               {selectedEvents.length > 0 ? (
                 selectedEvents.map((event) => {
                   const isJoined = joinedEvents.includes(event.id);
+                  const isLockedClubEvent =
+                    event.is_club_members_only &&
+                    Boolean(event.club_id) &&
+                    !joinedClubIds.includes(event.club_id as string);
 
                   return (
                     <article
@@ -949,6 +976,12 @@ export default function EventsPage() {
                             {event.is_university_event && event.responsible_club && (
                               <span className="rounded-full border border-[#c7d5fb] bg-[#eef3ff] px-3 py-1 text-xs font-semibold text-[#1e3a8a]">
                                 {event.responsible_club}
+                              </span>
+                            )}
+
+                            {event.is_club_members_only && (
+                              <span className="rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-700">
+                                Club members only
                               </span>
                             )}
 
@@ -1043,7 +1076,8 @@ export default function EventsPage() {
                             disabled={
                               isJoined ||
                               (event.isFull && !isJoined) ||
-                              event.status === "completed"
+                              event.status === "completed" ||
+                              isLockedClubEvent
                             }
                             className={`rounded-2xl px-4 py-2.5 text-sm font-semibold transition ${
                               event.status === "completed"
@@ -1052,8 +1086,11 @@ export default function EventsPage() {
                                 ? "cursor-not-allowed bg-sky-50 text-sky-700"
                                 : event.isFull && !isJoined
                                 ? "cursor-not-allowed bg-slate-200 text-slate-500"
+                                : isLockedClubEvent
+                                ? "cursor-not-allowed bg-amber-50 text-amber-700"
                                 : "bg-[#1e3a8a] text-white hover:opacity-90"
                             }`}
+                            title={isLockedClubEvent ? "Join the club first" : undefined}
                           >
                             {event.status === "completed"
                               ? "Completed"
@@ -1061,6 +1098,8 @@ export default function EventsPage() {
                               ? "Joined"
                               : event.isFull && !isJoined
                               ? "Full"
+                              : isLockedClubEvent
+                              ? "Members only"
                               : "Join"}
                           </button>
                         </div>
