@@ -30,14 +30,6 @@ type EventRow = {
   event_date?: string | null;
 };
 
-type ProfileRow = {
-  full_name?: string | null;
-  email?: string | null;
-  student_id?: string | null;
-  major?: string | null;
-  academic_year?: string | null;
-};
-
 type ClubMemberRow = {
   club_id: string;
 };
@@ -126,7 +118,6 @@ export default function ClubsPage() {
   const [clubs, setClubs] = useState<Club[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [profile, setProfile] = useState<ProfileRow | null>(null);
   const [userId, setUserId] = useState("");
   const [joinedClubIds, setJoinedClubIds] = useState<string[]>([]);
   const [clubActionId, setClubActionId] = useState("");
@@ -152,22 +143,13 @@ export default function ClubsPage() {
 
         setUserId(user.id);
 
-        const [profileResult, clubsResult, eventsResult, membershipsResult] = await Promise.all([
-          supabase
-            .from("profiles")
-            .select("full_name, email, student_id, major, academic_year")
-            .eq("id", user.id)
-            .single(),
+        const [clubsResult, eventsResult, membershipsResult] = await Promise.all([
           supabase.from("clubs").select("*"),
           supabase
             .from("events")
             .select("id, title, category, club_id, event_date"),
           supabase.from("club_members").select("club_id").eq("user_id", user.id),
         ]);
-
-        if (!profileResult.error) {
-          setProfile(profileResult.data as ProfileRow);
-        }
 
         if (clubsResult.error) {
           setError(clubsResult.error.message);
@@ -257,14 +239,8 @@ export default function ClubsPage() {
     setClubActionId(clubId);
     setError("");
 
-    const { error: joinError } = await supabase.from("club_members").insert({
-      club_id: clubId,
-      user_id: userId,
-      full_name: profile?.full_name || "",
-      email: profile?.email || "",
-      student_id: profile?.student_id || "",
-      major: profile?.major || "",
-      academic_year: profile?.academic_year || "",
+    const { error: joinError } = await supabase.rpc("join_club", {
+      target_club_id: clubId,
     });
 
     if (joinError) {
@@ -284,11 +260,9 @@ export default function ClubsPage() {
     setClubActionId(clubId);
     setError("");
 
-    const { error: leaveError } = await supabase
-      .from("club_members")
-      .delete()
-      .eq("club_id", clubId)
-      .eq("user_id", userId);
+    const { error: leaveError } = await supabase.rpc("leave_club", {
+      target_club_id: clubId,
+    });
 
     if (leaveError) {
       setError(leaveError.message);

@@ -227,6 +227,70 @@ for delete
 to authenticated
 using (auth.uid() = user_id);
 
+create or replace function public.join_club(target_club_id uuid)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  current_profile public.profiles%rowtype;
+begin
+  if auth.uid() is null then
+    raise exception 'You must be signed in to join a club.';
+  end if;
+
+  select *
+  into current_profile
+  from public.profiles
+  where id = auth.uid();
+
+  if not found then
+    raise exception 'Profile not found for this account.';
+  end if;
+
+  insert into public.club_members (
+    club_id,
+    user_id,
+    full_name,
+    email,
+    student_id,
+    major,
+    academic_year
+  )
+  values (
+    target_club_id,
+    auth.uid(),
+    current_profile.full_name,
+    current_profile.email,
+    current_profile.student_id,
+    current_profile.major,
+    current_profile.academic_year
+  )
+  on conflict (club_id, user_id) do nothing;
+end;
+$$;
+
+create or replace function public.leave_club(target_club_id uuid)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if auth.uid() is null then
+    raise exception 'You must be signed in to leave a club.';
+  end if;
+
+  delete from public.club_members
+  where club_id = target_club_id
+    and user_id = auth.uid();
+end;
+$$;
+
+grant execute on function public.join_club(uuid) to authenticated;
+grant execute on function public.leave_club(uuid) to authenticated;
+
 drop policy if exists "Users can create their own teams" on public.teams;
 create policy "Users can create their own teams"
 on public.teams
