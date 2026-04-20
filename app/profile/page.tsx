@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -56,6 +56,27 @@ type MemberTeam = Team & {
   membershipStatus: "pending" | "approved" | "rejected" | "invited";
 };
 
+type EventRef = {
+  id: string;
+  title?: string | null;
+};
+
+type EventRegistrationRow = {
+  event_id: string;
+};
+
+type Club = {
+  id: string;
+  name?: string | null;
+  title?: string | null;
+  category?: string | null;
+};
+
+type ClubMembership = {
+  club_id: string;
+  clubs?: Club | Club[] | null;
+};
+
 const TEAM_MEMBER_LIMIT = 6;
 
 const yearOptions = [
@@ -79,6 +100,12 @@ const interestOptions = [
   "Networking Events",
   "Tech Communities",
 ];
+
+const getClubName = (club: Club) =>
+  club.name?.trim() || club.title?.trim() || "Untitled club";
+
+const getClubFromMembership = (membership: ClubMembership) =>
+  Array.isArray(membership.clubs) ? membership.clubs[0] : membership.clubs;
 
 export default function ProfilePage() {
   const router = useRouter();
@@ -106,6 +133,9 @@ export default function ProfilePage() {
   const [avatarUrl, setAvatarUrl] = useState("");
   const [ownedTeams, setOwnedTeams] = useState<OwnedTeam[]>([]);
   const [memberTeams, setMemberTeams] = useState<MemberTeam[]>([]);
+  const [eventRefs, setEventRefs] = useState<EventRef[]>([]);
+  const [eventRegistrations, setEventRegistrations] = useState<EventRegistrationRow[]>([]);
+  const [joinedClubs, setJoinedClubs] = useState<Club[]>([]);
   const [teamActionId, setTeamActionId] = useState("");
   const [addMemberInputs, setAddMemberInputs] = useState<Record<string, string>>({});
   const [editingTeamId, setEditingTeamId] = useState("");
@@ -242,6 +272,54 @@ export default function ProfilePage() {
     setMemberTeams(teams);
   };
 
+  const loadProfileActivity = async (userId: string) => {
+    const [eventRefsResult, eventRegistrationsResult, clubMembershipsResult] =
+      await Promise.all([
+        supabase.from("events").select("id, title"),
+        supabase
+          .from("event_registrations")
+          .select("event_id")
+          .eq("user_id", userId),
+        supabase
+          .from("club_members")
+          .select("club_id, clubs(id, name, title, category)")
+          .eq("user_id", userId),
+      ]);
+
+    if (eventRefsResult.error) {
+      console.warn("Could not load event references:", eventRefsResult.error.message);
+      setEventRefs([]);
+    } else {
+      setEventRefs(((eventRefsResult.data || []) as EventRef[]).filter(Boolean));
+    }
+
+    if (eventRegistrationsResult.error) {
+      console.warn(
+        "Could not load event registrations:",
+        eventRegistrationsResult.error.message
+      );
+      setEventRegistrations([]);
+    } else {
+      setEventRegistrations(
+        ((eventRegistrationsResult.data || []) as EventRegistrationRow[]).filter(Boolean)
+      );
+    }
+
+    if (clubMembershipsResult.error) {
+      console.warn(
+        "Could not load joined clubs:",
+        clubMembershipsResult.error.message
+      );
+      setJoinedClubs([]);
+    } else {
+      setJoinedClubs(
+        ((clubMembershipsResult.data || []) as ClubMembership[])
+          .map(getClubFromMembership)
+          .filter(Boolean) as Club[]
+      );
+    }
+  };
+
   useEffect(() => {
     const loadProfile = async () => {
       setLoading(true);
@@ -281,6 +359,10 @@ export default function ProfilePage() {
         setSkillsInput(data.skills?.join(", ") || "");
         setInterests(data.interests || []);
         setAvatarUrl(data.avatar_url || "");
+
+        void loadOwnedTeams(user.id);
+        void loadMemberTeams(user.id);
+        void loadProfileActivity(user.id);
 
         setLoading(false);
 
@@ -942,6 +1024,42 @@ export default function ProfilePage() {
     email?.trim()?.charAt(0)?.toUpperCase() ||
     "S";
 
+  const myTeamsCount = useMemo(() => {
+    const teamIds = new Set<string>();
+    ownedTeams.forEach((team) => teamIds.add(team.id));
+    memberTeams.forEach((team) => teamIds.add(team.id));
+    return teamIds.size;
+  }, [memberTeams, ownedTeams]);
+
+  const joinedEventsCount = useMemo(() => {
+    const joined = new Set(eventRegistrations.map((registration) => registration.event_id));
+    const eventIdByTitle = new Map(
+      eventRefs
+        .filter((event) => event.title)
+        .map((event) => [event.title!.toLowerCase(), event.id])
+    );
+
+    [...ownedTeams, ...memberTeams].forEach((team) => {
+      const eventTitle = team.event?.toLowerCase();
+      const eventId = eventTitle ? eventIdByTitle.get(eventTitle) : undefined;
+
+      if (eventId) {
+        joined.add(eventId);
+      }
+    });
+
+    return joined.size;
+  }, [eventRefs, eventRegistrations, memberTeams, ownedTeams]);
+
+  const joinedClubNames = useMemo(() => {
+    if (joinedClubs.length === 0) return "No joined clubs yet";
+
+    const names = joinedClubs.map(getClubName);
+    if (names.length <= 2) return names.join(", ");
+
+    return `${names.slice(0, 2).join(", ")} +${names.length - 2} more`;
+  }, [joinedClubs]);
+
   const inputClass =
     "mt-2 w-full rounded-xl border border-gray-300 px-4 py-3 text-sm text-gray-900 placeholder:text-gray-400 bg-white outline-none focus:border-[#1e3a8a] focus:ring-2 focus:ring-[#1e3a8a]/10";
 
@@ -1103,6 +1221,41 @@ export default function ProfilePage() {
                 </div>
               )}
             </div>
+
+            {!editing && (
+              <div className="mt-8 grid gap-3 sm:grid-cols-3">
+                <Link
+                  href="/teams"
+                  className="rounded-xl bg-[#eef3ff] p-4 transition hover:bg-[#dfe8ff]"
+                >
+                  <p className="text-sm font-medium text-[#1e3a8a]">My teams</p>
+                  <p className="mt-2 text-2xl font-bold text-[#1e3a8a]">
+                    {myTeamsCount}
+                  </p>
+                </Link>
+                <Link
+                  href="/events"
+                  className="rounded-xl bg-sky-50 p-4 transition hover:bg-sky-100"
+                >
+                  <p className="text-sm font-medium text-sky-700">Joined events</p>
+                  <p className="mt-2 text-2xl font-bold text-sky-700">
+                    {joinedEventsCount}
+                  </p>
+                </Link>
+                <Link
+                  href="/clubs"
+                  className="rounded-xl bg-slate-50 p-4 transition hover:bg-slate-100"
+                >
+                  <p className="text-sm font-medium text-slate-700">Joined clubs</p>
+                  <p className="mt-2 text-2xl font-bold text-slate-900">
+                    {joinedClubs.length}
+                  </p>
+                  <p className="mt-1 truncate text-xs text-slate-500">
+                    {joinedClubNames}
+                  </p>
+                </Link>
+              </div>
+            )}
 
             <div className="mt-8 grid gap-6 sm:grid-cols-2">
               <div>

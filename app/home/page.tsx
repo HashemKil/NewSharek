@@ -42,30 +42,6 @@ type ClubRow = {
   image_url?: string | null;
 };
 
-type TeamRow = {
-  id: string;
-  name: string;
-  event: string | null;
-  owner_id: string | null;
-  is_open_to_members?: boolean | null;
-};
-
-type TeamMemberRow = {
-  team_id: string;
-  user_id: string;
-  status: string | null;
-  teams?: TeamRow | TeamRow[] | null;
-};
-
-type EventRegistrationRow = {
-  event_id: string;
-};
-
-type ClubMembershipRow = {
-  club_id: string;
-  clubs?: ClubRow | ClubRow[] | null;
-};
-
 const formatDate = (value?: string | null) => {
   if (!value) return "Date not set";
   const datePart = value.split("T")[0];
@@ -98,12 +74,6 @@ const formatTime = (value?: string | null) => {
 const getClubName = (club: ClubRow) =>
   club.name?.trim() || club.title?.trim() || "Untitled club";
 
-const getTeamFromMembership = (membership: TeamMemberRow) =>
-  Array.isArray(membership.teams) ? membership.teams[0] : membership.teams;
-
-const getClubFromMembership = (membership: ClubMembershipRow) =>
-  Array.isArray(membership.clubs) ? membership.clubs[0] : membership.clubs;
-
 const psutNewsItems = [
   {
     label: "Student activities",
@@ -135,12 +105,7 @@ export default function HomePage() {
   const [error, setError] = useState("");
   const [profile, setProfile] = useState<Profile | null>(null);
   const [events, setEvents] = useState<EventRow[]>([]);
-  const [eventRefs, setEventRefs] = useState<Pick<EventRow, "id" | "title">[]>([]);
-  const [eventRegistrations, setEventRegistrations] = useState<EventRegistrationRow[]>([]);
   const [clubs, setClubs] = useState<ClubRow[]>([]);
-  const [joinedClubs, setJoinedClubs] = useState<ClubRow[]>([]);
-  const [teams, setTeams] = useState<TeamRow[]>([]);
-  const [memberships, setMemberships] = useState<TeamMemberRow[]>([]);
   const [activeNewsIndex, setActiveNewsIndex] = useState(0);
 
   useEffect(() => {
@@ -162,12 +127,7 @@ export default function HomePage() {
         const [
           profileResult,
           eventsResult,
-          eventRefsResult,
-          eventRegistrationsResult,
           clubsResult,
-          clubMembershipsResult,
-          teamsResult,
-          membershipsResult,
         ] = await Promise.all([
             supabase.from("profiles").select("*").eq("id", user.id).single(),
             supabase
@@ -177,22 +137,7 @@ export default function HomePage() {
               )
               .order("event_date", { ascending: true })
               .limit(6),
-            supabase.from("events").select("id, title"),
-            supabase
-              .from("event_registrations")
-              .select("event_id")
-              .eq("user_id", user.id),
             supabase.from("clubs").select("*").limit(8),
-            supabase
-              .from("club_members")
-              .select("club_id, clubs(*)")
-              .eq("user_id", user.id),
-            supabase.from("teams").select("*").order("created_at", { ascending: false }).limit(6),
-            supabase
-              .from("team_members")
-              .select("team_id, user_id, status, teams(*)")
-              .eq("user_id", user.id)
-              .neq("status", "rejected"),
           ]);
 
         if (profileResult.error) {
@@ -202,18 +147,7 @@ export default function HomePage() {
 
         setProfile(profileResult.data as Profile);
         setEvents(((eventsResult.data || []) as EventRow[]).filter(Boolean));
-        setEventRefs(((eventRefsResult.data || []) as Pick<EventRow, "id" | "title">[]).filter(Boolean));
-        setEventRegistrations(
-          ((eventRegistrationsResult.data || []) as EventRegistrationRow[]).filter(Boolean)
-        );
         setClubs(((clubsResult.data || []) as ClubRow[]).filter(Boolean));
-        setJoinedClubs(
-          ((clubMembershipsResult.data || []) as ClubMembershipRow[])
-            .map(getClubFromMembership)
-            .filter(Boolean) as ClubRow[]
-        );
-        setTeams(((teamsResult.data || []) as TeamRow[]).filter(Boolean));
-        setMemberships(((membershipsResult.data || []) as TeamMemberRow[]).filter(Boolean));
       } catch (err) {
         console.error("HOME LOAD ERROR:", err);
         setError("Something went wrong while loading your home page.");
@@ -228,47 +162,6 @@ export default function HomePage() {
   const firstName = useMemo(() => {
     return profile?.full_name?.trim().split(" ")[0] || "Student";
   }, [profile?.full_name]);
-
-  const myTeams = useMemo(() => {
-    const membershipTeams = memberships
-      .map(getTeamFromMembership)
-      .filter(Boolean) as TeamRow[];
-    const ownedTeams = teams.filter((team) => team.owner_id === profile?.id);
-    const byId = new Map<string, TeamRow>();
-
-    [...ownedTeams, ...membershipTeams].forEach((team) => byId.set(team.id, team));
-    return Array.from(byId.values()).slice(0, 4);
-  }, [memberships, profile?.id, teams]);
-
-  const joinedEventsCount = useMemo(() => {
-    const joined = new Set(eventRegistrations.map((registration) => registration.event_id));
-    const eventIdByTitle = new Map(
-      eventRefs
-        .filter((event) => event.title)
-        .map((event) => [event.title!.toLowerCase(), event.id])
-    );
-
-    memberships.forEach((membership) => {
-      const team = getTeamFromMembership(membership);
-      const eventTitle = team?.event?.toLowerCase();
-      const eventId = eventTitle ? eventIdByTitle.get(eventTitle) : undefined;
-
-      if (eventId) {
-        joined.add(eventId);
-      }
-    });
-
-    return joined.size;
-  }, [eventRefs, eventRegistrations, memberships]);
-
-  const joinedClubNames = useMemo(() => {
-    if (joinedClubs.length === 0) return "No joined clubs yet";
-
-    const names = joinedClubs.map(getClubName);
-    if (names.length <= 2) return names.join(", ");
-
-    return `${names.slice(0, 2).join(", ")} +${names.length - 2} more`;
-  }, [joinedClubs]);
 
   const initials =
     profile?.full_name?.trim().charAt(0).toUpperCase() ||
@@ -399,29 +292,10 @@ export default function HomePage() {
                 </div>
               </div>
 
-              <div className="grid gap-3 sm:grid-cols-2 lg:min-w-[660px] lg:grid-cols-4">
+              <div className="grid gap-3 sm:min-w-[220px]">
                 <div className="rounded-lg bg-slate-100 p-4">
                   <p className="text-sm font-medium text-slate-500">Upcoming events</p>
                   <p className="mt-2 text-2xl font-bold text-slate-900">{events.length}</p>
-                </div>
-                <div className="rounded-lg bg-[#eef3ff] p-4">
-                  <p className="text-sm font-medium text-[#1e3a8a]">My teams</p>
-                  <p className="mt-2 text-2xl font-bold text-[#1e3a8a]">{myTeams.length}</p>
-                </div>
-                <div className="rounded-lg bg-sky-50 p-4">
-                  <p className="text-sm font-medium text-sky-700">Joined events</p>
-                  <p className="mt-2 text-2xl font-bold text-sky-700">
-                    {joinedEventsCount}
-                  </p>
-                </div>
-                <div className="rounded-lg bg-slate-50 p-4">
-                  <p className="text-sm font-medium text-slate-700">Joined clubs</p>
-                  <p className="mt-2 text-2xl font-bold text-slate-900">
-                    {joinedClubs.length}
-                  </p>
-                  <p className="mt-1 truncate text-xs text-slate-500">
-                    {joinedClubNames}
-                  </p>
                 </div>
               </div>
             </div>
