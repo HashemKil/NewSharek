@@ -468,6 +468,12 @@ export default function ClubsPage() {
                       )}
 
                       <div className="mt-5 flex flex-wrap gap-2">
+                        <Link
+                          href={`/clubs/${club.id}`}
+                          className="rounded-lg border border-[#c7d5fb] bg-[#eef3ff] px-3 py-2 text-sm font-semibold text-[#1e3a8a] transition hover:bg-[#dfe8ff]"
+                        >
+                          View club
+                        </Link>
                         {clubMembershipsAvailable && (
                           joinedClubIds.includes(club.id) ? (
                             <button
