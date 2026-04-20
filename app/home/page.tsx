@@ -61,6 +61,11 @@ type EventRegistrationRow = {
   event_id: string;
 };
 
+type ClubMembershipRow = {
+  club_id: string;
+  clubs?: ClubRow | ClubRow[] | null;
+};
+
 const formatDate = (value?: string | null) => {
   if (!value) return "Date not set";
   const datePart = value.split("T")[0];
@@ -96,6 +101,9 @@ const getClubName = (club: ClubRow) =>
 const getTeamFromMembership = (membership: TeamMemberRow) =>
   Array.isArray(membership.teams) ? membership.teams[0] : membership.teams;
 
+const getClubFromMembership = (membership: ClubMembershipRow) =>
+  Array.isArray(membership.clubs) ? membership.clubs[0] : membership.clubs;
+
 const psutNewsItems = [
   {
     label: "Student activities",
@@ -130,6 +138,7 @@ export default function HomePage() {
   const [eventRefs, setEventRefs] = useState<Pick<EventRow, "id" | "title">[]>([]);
   const [eventRegistrations, setEventRegistrations] = useState<EventRegistrationRow[]>([]);
   const [clubs, setClubs] = useState<ClubRow[]>([]);
+  const [joinedClubs, setJoinedClubs] = useState<ClubRow[]>([]);
   const [teams, setTeams] = useState<TeamRow[]>([]);
   const [memberships, setMemberships] = useState<TeamMemberRow[]>([]);
   const [activeNewsIndex, setActiveNewsIndex] = useState(0);
@@ -156,6 +165,7 @@ export default function HomePage() {
           eventRefsResult,
           eventRegistrationsResult,
           clubsResult,
+          clubMembershipsResult,
           teamsResult,
           membershipsResult,
         ] = await Promise.all([
@@ -173,6 +183,10 @@ export default function HomePage() {
               .select("event_id")
               .eq("user_id", user.id),
             supabase.from("clubs").select("*").limit(8),
+            supabase
+              .from("club_members")
+              .select("club_id, clubs(*)")
+              .eq("user_id", user.id),
             supabase.from("teams").select("*").order("created_at", { ascending: false }).limit(6),
             supabase
               .from("team_members")
@@ -193,6 +207,11 @@ export default function HomePage() {
           ((eventRegistrationsResult.data || []) as EventRegistrationRow[]).filter(Boolean)
         );
         setClubs(((clubsResult.data || []) as ClubRow[]).filter(Boolean));
+        setJoinedClubs(
+          ((clubMembershipsResult.data || []) as ClubMembershipRow[])
+            .map(getClubFromMembership)
+            .filter(Boolean) as ClubRow[]
+        );
         setTeams(((teamsResult.data || []) as TeamRow[]).filter(Boolean));
         setMemberships(((membershipsResult.data || []) as TeamMemberRow[]).filter(Boolean));
       } catch (err) {
@@ -241,6 +260,15 @@ export default function HomePage() {
 
     return joined.size;
   }, [eventRefs, eventRegistrations, memberships]);
+
+  const joinedClubNames = useMemo(() => {
+    if (joinedClubs.length === 0) return "No joined clubs yet";
+
+    const names = joinedClubs.map(getClubName);
+    if (names.length <= 2) return names.join(", ");
+
+    return `${names.slice(0, 2).join(", ")} +${names.length - 2} more`;
+  }, [joinedClubs]);
 
   const initials =
     profile?.full_name?.trim().charAt(0).toUpperCase() ||
@@ -371,7 +399,7 @@ export default function HomePage() {
                 </div>
               </div>
 
-              <div className="grid gap-3 sm:grid-cols-3 lg:min-w-[520px]">
+              <div className="grid gap-3 sm:grid-cols-2 lg:min-w-[660px] lg:grid-cols-4">
                 <div className="rounded-lg bg-slate-100 p-4">
                   <p className="text-sm font-medium text-slate-500">Upcoming events</p>
                   <p className="mt-2 text-2xl font-bold text-slate-900">{events.length}</p>
@@ -384,6 +412,15 @@ export default function HomePage() {
                   <p className="text-sm font-medium text-sky-700">Joined events</p>
                   <p className="mt-2 text-2xl font-bold text-sky-700">
                     {joinedEventsCount}
+                  </p>
+                </div>
+                <div className="rounded-lg bg-slate-50 p-4">
+                  <p className="text-sm font-medium text-slate-700">Joined clubs</p>
+                  <p className="mt-2 text-2xl font-bold text-slate-900">
+                    {joinedClubs.length}
+                  </p>
+                  <p className="mt-1 truncate text-xs text-slate-500">
+                    {joinedClubNames}
                   </p>
                 </div>
               </div>
