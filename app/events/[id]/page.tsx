@@ -17,6 +17,10 @@ type EventRow = {
   end_time?: string | null;
   location?: string | null;
   source_url?: string | null;
+  image_url?: string | null;
+  poster_url?: string | null;
+  banner_url?: string | null;
+  thumbnail_url?: string | null;
   club_id?: string | null;
   registered_count?: number | null;
   max_capacity?: number | null;
@@ -78,6 +82,13 @@ const inputClass =
 const TEAM_MEMBER_LIMIT = 6;
 type EventStatus = "upcoming" | "ongoing" | "completed";
 
+const getEventImageUrl = (event: EventRow | null) =>
+  event?.image_url?.trim() ||
+  event?.poster_url?.trim() ||
+  event?.banner_url?.trim() ||
+  event?.thumbnail_url?.trim() ||
+  null;
+
 export default function EventDetailsPage() {
   const params = useParams();
   const router = useRouter();
@@ -105,6 +116,7 @@ export default function EventDetailsPage() {
   const [maxMembers, setMaxMembers] = useState(String(TEAM_MEMBER_LIMIT));
 
   const eventDate = event?.event_date ?? event?.date ?? null;
+  const eventImageUrl = getEventImageUrl(event);
   const isTeamBased = Boolean(event?.is_team_based);
   const isClubMembersOnly = Boolean(event?.is_club_members_only);
   const isLockedClubEvent =
@@ -759,6 +771,13 @@ export default function EventDetailsPage() {
           <div className="mt-6 grid gap-6 lg:grid-cols-[1.15fr_0.85fr]">
             <div className="space-y-6">
               <article className="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
+                {eventImageUrl && (
+                  <img
+                    src={eventImageUrl}
+                    alt={event.title || "Event image"}
+                    className="mb-6 h-80 w-full rounded-lg object-cover"
+                  />
+                )}
                 <div className="flex flex-wrap items-center gap-2">
                   <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700">
                     {event.category || "Event"}

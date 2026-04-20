@@ -7,6 +7,9 @@ add column if not exists is_university_event boolean not null default false;
 alter table public.events
 add column if not exists is_club_members_only boolean not null default false;
 
+alter table public.events
+add column if not exists image_url text;
+
 alter table public.profiles
 add column if not exists phone_number text;
 

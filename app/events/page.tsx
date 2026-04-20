@@ -16,6 +16,10 @@ type EventRow = {
   end_time?: string | null;
   location?: string | null;
   source_url?: string | null;
+  image_url?: string | null;
+  poster_url?: string | null;
+  banner_url?: string | null;
+  thumbnail_url?: string | null;
   club_id?: string | null;
   registered_count?: number | null;
   max_capacity?: number | null;
@@ -36,6 +40,7 @@ type EventItem = {
   end_time: string | null;
   location: string;
   source_url?: string | null;
+  image_url: string | null;
   club_id?: string | null;
   registered_count: number;
   max_capacity: number | null;
@@ -70,6 +75,7 @@ type TeamMembershipRow = {
 type EventTypeRow = Pick<
   EventRow,
   "id" | "is_team_based" | "is_university_event" | "is_club_members_only" | "club_id"
+  | "image_url" | "poster_url" | "banner_url" | "thumbnail_url"
 >;
 
 type ClubRow = {
@@ -84,6 +90,18 @@ type ClubMemberRow = {
 
 const getClubName = (club: ClubRow) =>
   club.name?.trim() || club.title?.trim() || "University club";
+
+type EventImageFields = Pick<
+  EventRow,
+  "image_url" | "poster_url" | "banner_url" | "thumbnail_url"
+>;
+
+const getEventImageUrl = (event: EventImageFields) =>
+  event.image_url?.trim() ||
+  event.poster_url?.trim() ||
+  event.banner_url?.trim() ||
+  event.thumbnail_url?.trim() ||
+  null;
 
 const STATUS_TABS = [
   "All Statuses",
@@ -141,6 +159,7 @@ export default function EventsPage() {
       end_time: row.end_time ?? null,
       location: row.location ?? "TBA",
       source_url: row.source_url ?? null,
+      image_url: getEventImageUrl(row),
       club_id: row.club_id ?? null,
       registered_count: row.registered_count ?? 0,
       max_capacity: row.max_capacity ?? null,
@@ -207,10 +226,20 @@ export default function EventsPage() {
 
         if (!viewError && viewData) {
           const eventIds = (viewData as EventRow[]).map((event) => event.id);
-          const { data: typeData } = await supabase
+          const eventTypeSelect =
+            "id, is_team_based, is_university_event, is_club_members_only, club_id";
+          const eventTypeImageSelect = `${eventTypeSelect}, image_url, poster_url, banner_url, thumbnail_url`;
+          const typeResult = await supabase
             .from("events")
-            .select("id, is_team_based, is_university_event, is_club_members_only, club_id")
+            .select(eventTypeImageSelect)
             .in("id", eventIds);
+          const fallbackTypeResult = typeResult.error
+            ? await supabase
+                .from("events")
+                .select(eventTypeSelect)
+                .in("id", eventIds)
+            : null;
+          const typeData = fallbackTypeResult?.data ?? typeResult.data;
 
           const typeByEventId = new Map(
             ((typeData || []) as EventTypeRow[]).map((event) => [
@@ -231,6 +260,9 @@ export default function EventsPage() {
               is_club_members_only:
                 typeByEventId.get(event.id)?.is_club_members_only ??
                 event.is_club_members_only,
+              image_url:
+                getEventImageUrl(typeByEventId.get(event.id) ?? event) ??
+                getEventImageUrl(event),
               club_id: typeByEventId.get(event.id)?.club_id ?? event.club_id,
             })
           );
@@ -964,6 +996,13 @@ export default function EventsPage() {
                       key={event.id}
                       className="rounded-3xl border border-slate-200 bg-white p-5 transition hover:border-[#1e3a8a]/30 hover:shadow-md"
                     >
+                      {event.image_url && (
+                        <img
+                          src={event.image_url}
+                          alt={event.title}
+                          className="mb-5 h-64 w-full rounded-2xl object-cover"
+                        />
+                      )}
                       <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
                         <div className="flex-1">
                           <div className="flex flex-wrap items-center gap-2">

@@ -30,6 +30,10 @@ type EventRow = {
   start_time?: string | null;
   end_time?: string | null;
   location?: string | null;
+  image_url?: string | null;
+  poster_url?: string | null;
+  banner_url?: string | null;
+  thumbnail_url?: string | null;
   is_team_based?: boolean | null;
   is_club_members_only?: boolean | null;
 };
@@ -41,6 +45,13 @@ type ClubMemberCountRow = {
 
 const getClubName = (club: ClubRow) =>
   club.name?.trim() || club.title?.trim() || "Untitled club";
+
+const getEventImageUrl = (event: EventRow) =>
+  event.image_url?.trim() ||
+  event.poster_url?.trim() ||
+  event.banner_url?.trim() ||
+  event.thumbnail_url?.trim() ||
+  null;
 
 const formatDate = (value?: string | null) => {
   if (!value) return "Date not set";
@@ -122,9 +133,10 @@ export default function ClubDetailsPage() {
 
         const eventSelect =
           "id, title, category, description, event_date, start_time, end_time, location, is_team_based";
+        const eventImageSelect = `${eventSelect}, is_club_members_only, image_url, poster_url, banner_url, thumbnail_url`;
         const eventsResult = await supabase
           .from("events")
-          .select(`${eventSelect}, is_club_members_only`)
+          .select(eventImageSelect)
           .eq("club_id", clubId)
           .order("event_date", { ascending: true });
 
@@ -384,6 +396,7 @@ export default function ClubDetailsPage() {
                   event.start_time && event.end_time
                     ? `${formatTime(event.start_time)} - ${formatTime(event.end_time)}`
                     : formatTime(event.start_time) || "Time not set";
+                const eventImageUrl = getEventImageUrl(event);
 
                 return (
                   <Link
@@ -391,6 +404,13 @@ export default function ClubDetailsPage() {
                     href={`/events/${event.id}`}
                     className="block rounded-2xl border border-slate-200 p-4 transition hover:border-[#1e3a8a]/40 hover:bg-slate-50"
                   >
+                    {eventImageUrl && (
+                      <img
+                        src={eventImageUrl}
+                        alt={event.title || "Event image"}
+                        className="mb-4 h-44 w-full rounded-xl object-cover"
+                      />
+                    )}
                     <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
                       <div>
                         <div className="flex flex-wrap gap-2">
