@@ -239,9 +239,17 @@ export default function ClubsPage() {
     setClubActionId(clubId);
     setError("");
 
-    const { error: joinError } = await supabase.rpc("join_club", {
+    let { error: joinError } = await supabase.rpc("join_club", {
       target_club_id: clubId,
     });
+
+    if (joinError?.message?.toLowerCase().includes("schema cache")) {
+      const fallback = await supabase.from("club_members").insert({
+        club_id: clubId,
+        user_id: userId,
+      });
+      joinError = fallback.error;
+    }
 
     if (joinError) {
       setError(joinError.message);
@@ -260,9 +268,18 @@ export default function ClubsPage() {
     setClubActionId(clubId);
     setError("");
 
-    const { error: leaveError } = await supabase.rpc("leave_club", {
+    let { error: leaveError } = await supabase.rpc("leave_club", {
       target_club_id: clubId,
     });
+
+    if (leaveError?.message?.toLowerCase().includes("schema cache")) {
+      const fallback = await supabase
+        .from("club_members")
+        .delete()
+        .eq("club_id", clubId)
+        .eq("user_id", userId);
+      leaveError = fallback.error;
+    }
 
     if (leaveError) {
       setError(leaveError.message);

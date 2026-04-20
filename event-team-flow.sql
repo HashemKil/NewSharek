@@ -291,6 +291,8 @@ $$;
 grant execute on function public.join_club(uuid) to authenticated;
 grant execute on function public.leave_club(uuid) to authenticated;
 
+notify pgrst, 'reload schema';
+
 drop policy if exists "Users can create their own teams" on public.teams;
 create policy "Users can create their own teams"
 on public.teams
