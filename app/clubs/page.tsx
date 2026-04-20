@@ -30,6 +30,18 @@ type EventRow = {
   event_date?: string | null;
 };
 
+type ProfileRow = {
+  full_name?: string | null;
+  email?: string | null;
+  student_id?: string | null;
+  major?: string | null;
+  academic_year?: string | null;
+};
+
+type ClubMemberRow = {
+  club_id: string;
+};
+
 type Club = ClubRow & {
   displayName: string;
   eventCount: number;
@@ -114,6 +126,11 @@ export default function ClubsPage() {
   const [clubs, setClubs] = useState<Club[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [profile, setProfile] = useState<ProfileRow | null>(null);
+  const [userId, setUserId] = useState("");
+  const [joinedClubIds, setJoinedClubIds] = useState<string[]>([]);
+  const [clubActionId, setClubActionId] = useState("");
+  const [clubMembershipsAvailable, setClubMembershipsAvailable] = useState(true);
   const [search, setSearch] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("All Clubs");
 
@@ -133,12 +150,24 @@ export default function ClubsPage() {
           return;
         }
 
-        const [clubsResult, eventsResult] = await Promise.all([
+        setUserId(user.id);
+
+        const [profileResult, clubsResult, eventsResult, membershipsResult] = await Promise.all([
+          supabase
+            .from("profiles")
+            .select("full_name, email, student_id, major, academic_year")
+            .eq("id", user.id)
+            .single(),
           supabase.from("clubs").select("*"),
           supabase
             .from("events")
             .select("id, title, category, club_id, event_date"),
+          supabase.from("club_members").select("club_id").eq("user_id", user.id),
         ]);
+
+        if (!profileResult.error) {
+          setProfile(profileResult.data as ProfileRow);
+        }
 
         if (clubsResult.error) {
           setError(clubsResult.error.message);
@@ -174,6 +203,19 @@ export default function ClubsPage() {
           .sort((a, b) => a.displayName.localeCompare(b.displayName));
 
         setClubs(loadedClubs);
+
+        if (membershipsResult.error) {
+          console.error("CLUB MEMBERSHIPS LOAD ERROR:", membershipsResult.error);
+          setClubMembershipsAvailable(false);
+          setJoinedClubIds([]);
+        } else {
+          setClubMembershipsAvailable(true);
+          setJoinedClubIds(
+            ((membershipsResult.data || []) as ClubMemberRow[]).map(
+              (membership) => membership.club_id
+            )
+          );
+        }
       } catch (err) {
         console.error("CLUBS LOAD ERROR:", err);
         setError("Something went wrong while loading clubs.");
@@ -207,6 +249,54 @@ export default function ClubsPage() {
   const resetFilters = () => {
     setSearch("");
     setSelectedCategory("All Clubs");
+  };
+
+  const handleJoinClub = async (clubId: string) => {
+    if (!userId) return;
+
+    setClubActionId(clubId);
+    setError("");
+
+    const { error: joinError } = await supabase.from("club_members").insert({
+      club_id: clubId,
+      user_id: userId,
+      full_name: profile?.full_name || "",
+      email: profile?.email || "",
+      student_id: profile?.student_id || "",
+      major: profile?.major || "",
+      academic_year: profile?.academic_year || "",
+    });
+
+    if (joinError) {
+      setError(joinError.message);
+    } else {
+      setJoinedClubIds((current) =>
+        current.includes(clubId) ? current : [...current, clubId]
+      );
+    }
+
+    setClubActionId("");
+  };
+
+  const handleLeaveClub = async (clubId: string) => {
+    if (!userId) return;
+
+    setClubActionId(clubId);
+    setError("");
+
+    const { error: leaveError } = await supabase
+      .from("club_members")
+      .delete()
+      .eq("club_id", clubId)
+      .eq("user_id", userId);
+
+    if (leaveError) {
+      setError(leaveError.message);
+    } else {
+      setJoinedClubIds((current) => current.filter((id) => id !== clubId));
+    }
+
+    setClubActionId("");
   };
 
   return (
@@ -286,6 +376,12 @@ export default function ClubsPage() {
               </h2>
             </div>
 
+            {!clubMembershipsAvailable && (
+              <div className="mb-4 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-700">
+                Club joining needs the club members database table to be created.
+              </div>
+            )}
+
             {filteredClubs.length > 0 ? (
               <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
                 {filteredClubs.map((club) => {
@@ -359,6 +455,27 @@ export default function ClubsPage() {
                       )}
 
                       <div className="mt-5 flex flex-wrap gap-2">
+                        {clubMembershipsAvailable && (
+                          joinedClubIds.includes(club.id) ? (
+                            <button
+                              type="button"
+                              onClick={() => handleLeaveClub(club.id)}
+                              disabled={clubActionId === club.id}
+                              className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm font-semibold text-red-600 transition hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-60"
+                            >
+                              {clubActionId === club.id ? "Leaving..." : "Leave club"}
+                            </button>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => handleJoinClub(club.id)}
+                              disabled={clubActionId === club.id}
+                              className="rounded-lg bg-[#1e3a8a] px-3 py-2 text-sm font-semibold text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
+                            >
+                              {clubActionId === club.id ? "Joining..." : "Join club"}
+                            </button>
+                          )
+                        )}
                         {club.website_url && (
                           <a
                             href={club.website_url}

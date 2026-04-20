@@ -67,6 +67,19 @@ create table if not exists public.team_members (
   unique (team_id, user_id)
 );
 
+create table if not exists public.club_members (
+  id uuid primary key default gen_random_uuid(),
+  club_id uuid not null references public.clubs(id) on delete cascade,
+  user_id uuid not null references public.profiles(id) on delete cascade,
+  full_name text,
+  email text,
+  student_id text,
+  major text,
+  academic_year text,
+  created_at timestamptz not null default now(),
+  unique (club_id, user_id)
+);
+
 alter table public.team_members
 drop constraint if exists team_members_status_check;
 
@@ -76,6 +89,7 @@ check (status in ('pending', 'approved', 'rejected', 'invited'));
 
 alter table public.event_registrations enable row level security;
 alter table public.team_members enable row level security;
+alter table public.club_members enable row level security;
 
 drop policy if exists "Authenticated users can view profiles" on public.profiles;
 create policy "Authenticated users can view profiles"
@@ -191,6 +205,27 @@ on public.team_members
 for delete
 to authenticated
 using (auth.uid() = user_id and status = 'pending');
+
+drop policy if exists "Users can view their club memberships" on public.club_members;
+create policy "Users can view their club memberships"
+on public.club_members
+for select
+to authenticated
+using (auth.uid() = user_id);
+
+drop policy if exists "Users can join clubs" on public.club_members;
+create policy "Users can join clubs"
+on public.club_members
+for insert
+to authenticated
+with check (auth.uid() = user_id);
+
+drop policy if exists "Users can leave clubs" on public.club_members;
+create policy "Users can leave clubs"
+on public.club_members
+for delete
+to authenticated
+using (auth.uid() = user_id);
 
 drop policy if exists "Users can create their own teams" on public.teams;
 create policy "Users can create their own teams"
