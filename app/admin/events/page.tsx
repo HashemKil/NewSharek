@@ -61,32 +61,37 @@ async function fetchDevpostEvents(): Promise<AdminEvent[]> {
   if (!res.ok) return [];
   const json = await res.json();
   const hackathons: Record<string, unknown>[] = json?.hackathons ?? [];
-  return hackathons.slice(0, 12).map((h) => ({
-    id: `__devpost_${h.id ?? Math.random()}`,
-    title: (h.title as string) ?? "Untitled",
-    description: (h.tagline as string) ?? null,
-    category: ((h as {themes?: {name:string}[]}).themes?.[0]?.name) ?? "Hackathon",
-    event_date: (h.submission_period_dates as string)?.split(" - ")[1] ?? null,
-    location: (h.location as string) ?? null,
-    approval_status: "pending",
-    created_at: new Date().toISOString(),
-    source_url: "https://example.com/hackathon-2025",
-    is_club_members_only: false,
-  },
-  {
-    id: "__mock_2",
-    title: "Machine Learning Workshop",
-    description:
-      "Hands-on workshop introducing the fundamentals of ML using Python and scikit-learn. No prior experience required.",
-    category: "Workshop",
-    event_date: new Date(Date.now() + 14 * 86400000).toISOString(),
-    location: "CS Lab 204",
-    approval_status: "pending",
-    created_at: new Date().toISOString(),
-    source_url: null,
-    is_club_members_only: false,
-  },
-];
+  return [
+    ...hackathons.slice(0, 12).map((h) => ({
+      id: `__devpost_${h.id ?? Math.random()}`,
+      title: (h.title as string) ?? "Untitled",
+      description: (h.tagline as string) ?? null,
+      category:
+        ((h as { themes?: { name: string }[] }).themes?.[0]?.name) ??
+        "Hackathon",
+      event_date:
+        (h.submission_period_dates as string)?.split(" - ")[1] ?? null,
+      location: (h.location as string) ?? null,
+      approval_status: "pending",
+      created_at: new Date().toISOString(),
+      source_url: "https://example.com/hackathon-2025",
+      is_club_members_only: false,
+    })),
+    {
+      id: "__mock_2",
+      title: "Machine Learning Workshop",
+      description:
+        "Hands-on workshop introducing the fundamentals of ML using Python and scikit-learn. No prior experience required.",
+      category: "Workshop",
+      event_date: new Date(Date.now() + 14 * 86400000).toISOString(),
+      location: "CS Lab 204",
+      approval_status: "pending",
+      created_at: new Date().toISOString(),
+      source_url: null,
+      is_club_members_only: false,
+    },
+  ];
+}
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -488,7 +493,7 @@ function PendingModal({
     if (isMock) {
       setApproving(true); setSaveError("");
       if (newStatus === "approved") {
-        const { data, error } = await supabase.from("events").insert({
+        const { error } = await supabase.from("events").insert({
           title: edit.title, description: edit.description || null,
           category: edit.category || null, event_date: edit.event_date || null,
           location: edit.location || null, source_url: event.source_url || null,
@@ -708,6 +713,7 @@ function ActiveModal({
     category: event.category ?? "",
     event_date: event.event_date ? event.event_date.slice(0, 10) : "",
     location: event.location ?? "",
+    is_club_members_only: Boolean(event.is_club_members_only),
   });
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState("");
@@ -1137,7 +1143,9 @@ function ApiSourcesPanel({ onClose }: { onClose: () => void }) {
     setSources((data?.value as ApiSource[]) ?? []);
     setLoading(false);
   };
-  useEffect(() => { load(); }, []);
+  useEffect(() => {
+    void Promise.resolve().then(load);
+  }, []);
 
   const persist = async (next: ApiSource[]) => {
     setSaving(true);
@@ -1281,10 +1289,12 @@ export default function AdminEventsPage() {
     if (pendingEvents.length > 0) return;
     if (devpostFetchedRef.current) return; // only fetch once per page load
     devpostFetchedRef.current = true;
-    setDevpostLoading(true);
-    fetchDevpostEvents()
-      .then(setDevpostEvents)
-      .finally(() => setDevpostLoading(false));
+    void Promise.resolve().then(() => {
+      setDevpostLoading(true);
+      fetchDevpostEvents()
+        .then(setDevpostEvents)
+        .finally(() => setDevpostLoading(false));
+    });
   }, [loading, pendingEvents.length]);
 
   const activeEvents = useMemo(

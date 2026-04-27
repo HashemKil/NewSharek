@@ -112,7 +112,7 @@ const getTeamFromMembership = (membership: TeamMemberRow) =>
 const getClubFromMembership = (membership: ClubMembershipRow) =>
   Array.isArray(membership.clubs) ? membership.clubs[0] : membership.clubs;
 
-const psutNewsItems = [
+const DEFAULT_CAROUSEL: CarouselItem[] = [
   {
     label: "Student activities",
     title: "New activities are on the way",

@@ -326,7 +326,7 @@ export default function AdminUsersPage() {
   };
 
   useEffect(() => {
-    loadUsers();
+    void Promise.resolve().then(loadUsers);
   }, []);
 
   const handleRoleToggle = async (

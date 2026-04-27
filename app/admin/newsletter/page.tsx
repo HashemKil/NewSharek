@@ -180,7 +180,9 @@ export default function AdminNewsletterPage() {
             <polyline points="22,6 12,13 2,6" />
           </svg>
           <p className="text-sm font-medium text-slate-500">No carousel slides yet.</p>
-          <p className="text-xs text-slate-400">Click "Add slide" to create the first one.</p>
+          <p className="text-xs text-slate-400">
+            Click &quot;Add slide&quot; to create the first one.
+          </p>
         </div>
       ) : (
         <div className="space-y-4">
