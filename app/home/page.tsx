@@ -19,6 +19,14 @@ type Profile = {
   interests?: string[] | null;
 };
 
+type CarouselItem = {
+  label: string;
+  title: string;
+  body: string;
+  image: string;
+  url?: string | null;
+};
+
 type EventRow = {
   id: string;
   title?: string | null;
@@ -142,6 +150,21 @@ export default function HomePage() {
   const [teams, setTeams] = useState<TeamRow[]>([]);
   const [memberships, setMemberships] = useState<TeamMemberRow[]>([]);
   const [activeNewsIndex, setActiveNewsIndex] = useState(0);
+  const [psutNewsItems, setPsutNewsItems] = useState<CarouselItem[]>(DEFAULT_CAROUSEL);
+
+  // Fetch carousel from site_settings (non-blocking)
+  useEffect(() => {
+    supabase
+      .from("site_settings")
+      .select("value")
+      .eq("key", "homepage_carousel")
+      .single()
+      .then(({ data }) => {
+        if (data?.value && Array.isArray(data.value) && data.value.length > 0) {
+          setPsutNewsItems(data.value as CarouselItem[]);
+        }
+      });
+  }, []);
 
   useEffect(() => {
     const loadHome = async () => {
@@ -275,7 +298,7 @@ export default function HomePage() {
     profile?.email?.trim().charAt(0).toUpperCase() ||
     "S";
 
-  const activeNews = psutNewsItems[activeNewsIndex];
+  const activeNews = psutNewsItems[activeNewsIndex % psutNewsItems.length];
 
   const goToPreviousNews = () => {
     setActiveNewsIndex((current) =>

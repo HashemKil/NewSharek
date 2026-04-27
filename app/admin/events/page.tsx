@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "../../../lib/supabase";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -52,19 +52,22 @@ type Team = {
 };
 
 type PageTab = "pending" | "active";
-type ModalTab = "details" | "registrations" | "teams";
+type ModalTab = "details" | "registrations" | "teams" | "edit";
 
-// ─── Mock data (shown when scraper hasn't sent events yet) ────────────────────
+// ─── Devpost fetcher ──────────────────────────────────────────────────────────
 
-const MOCK_EVENTS: AdminEvent[] = [
-  {
-    id: "__mock_1",
-    title: "Annual Hackathon 2025",
-    description:
-      "A 24-hour hackathon challenging students to build innovative solutions around sustainability and smart cities. Prizes worth 10,000 SAR for the top three teams.",
-    category: "Hackathon",
-    event_date: new Date(Date.now() + 7 * 86400000).toISOString(),
-    location: "Engineering Building, Hall A",
+async function fetchDevpostEvents(): Promise<AdminEvent[]> {
+  const res = await fetch("/api/devpost");
+  if (!res.ok) return [];
+  const json = await res.json();
+  const hackathons: Record<string, unknown>[] = json?.hackathons ?? [];
+  return hackathons.slice(0, 12).map((h) => ({
+    id: `__devpost_${h.id ?? Math.random()}`,
+    title: (h.title as string) ?? "Untitled",
+    description: (h.tagline as string) ?? null,
+    category: ((h as {themes?: {name:string}[]}).themes?.[0]?.name) ?? "Hackathon",
+    event_date: (h.submission_period_dates as string)?.split(" - ")[1] ?? null,
+    location: (h.location as string) ?? null,
     approval_status: "pending",
     created_at: new Date().toISOString(),
     source_url: "https://example.com/hackathon-2025",
@@ -432,8 +435,20 @@ function PendingModal({
 
   const handleSave = async () => {
     if (isMock) {
-      setSaveSuccess("(Preview mode — no DB changes made)");
-      setTimeout(() => setSaveSuccess(""), 3000);
+      // Devpost event — INSERT as pending into DB
+      setSaving(true); setSaveError(""); setSaveSuccess("");
+      const { data, error } = await supabase.from("events").insert({
+        title: edit.title, description: edit.description || null,
+        category: edit.category || null, event_date: edit.event_date || null,
+        location: edit.location || null, source_url: event.source_url || null,
+        approval_status: "pending",
+      }).select("id").single();
+      if (error) { setSaveError(error.message); } else {
+        setSaveSuccess("Imported as pending event.");
+        setTimeout(() => setSaveSuccess(""), 3000);
+        onUpdated({ ...event, ...edit, id: data.id, approval_status: "pending" });
+      }
+      setSaving(false);
       return;
     }
     setSaving(true);
@@ -471,8 +486,20 @@ function PendingModal({
 
   const handleStatusChange = async (newStatus: "approved" | "rejected") => {
     if (isMock) {
-      setSaveSuccess(`(Preview mode — would ${newStatus} this event)`);
-      setTimeout(() => setSaveSuccess(""), 3000);
+      setApproving(true); setSaveError("");
+      if (newStatus === "approved") {
+        const { data, error } = await supabase.from("events").insert({
+          title: edit.title, description: edit.description || null,
+          category: edit.category || null, event_date: edit.event_date || null,
+          location: edit.location || null, source_url: event.source_url || null,
+          approval_status: "approved",
+        }).select("id").single();
+        if (error) { setSaveError(error.message); setApproving(false); return; }
+        onApproved(event.id);
+      } else {
+        onDeleted(event.id);
+      }
+      setApproving(false); onClose();
       return;
     }
     setApproving(true);
@@ -499,7 +526,7 @@ function PendingModal({
   };
 
   const handleDelete = async () => {
-    if (isMock) { onClose(); return; }
+    if (isMock) { onDeleted(event.id); onClose(); return; }
     setDeleting(true);
     const { error } = await supabase.from("events").delete().eq("id", event.id);
     if (error) { setSaveError(error.message); setDeleting(false); setDeleteConfirm(false); }
@@ -512,8 +539,8 @@ function PendingModal({
       <div className="flex items-start justify-between gap-4 border-b border-slate-100 px-6 py-5">
         <div className="flex flex-col gap-1.5">
           {isMock && (
-            <span className="w-fit rounded-full bg-slate-200 px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-500">
-              Preview — No real events yet
+            <span className="w-fit rounded-full bg-blue-100 px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-blue-600">
+              From Devpost
             </span>
           )}
           <div className="flex flex-wrap items-center gap-2">
@@ -549,11 +576,7 @@ function PendingModal({
           {saveError && <AlertBox type="error">{saveError}</AlertBox>}
           {saveSuccess && <AlertBox type="success">{saveSuccess}</AlertBox>}
 
-          {isMock && (
-            <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-700">
-              <strong>Preview mode.</strong> This is a sample event to show how scraped events will appear. Connect the web scraper to see real events here.
-            </div>
-          )}
+
 
           {/* Edit form */}
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -660,14 +683,16 @@ function PendingModal({
   );
 }
 
-// ─── Active Event Modal (read + registrations + teams) ────────────────────────
+// ─── Active Event Modal (read + edit + registrations + teams) ─────────────────
 
 function ActiveModal({
   event,
   onClose,
+  onUpdated,
 }: {
   event: AdminEvent;
   onClose: () => void;
+  onUpdated: (updated: AdminEvent) => void;
 }) {
   const [activeTab, setActiveTab] = useState<ModalTab>("details");
   const [registrants, setRegistrants] = useState<Registrant[]>([]);
@@ -676,8 +701,37 @@ function ActiveModal({
   const [teams, setTeams] = useState<Team[]>([]);
   const [teamsLoading, setTeamsLoading] = useState(false);
   const [teamsError, setTeamsError] = useState("");
+  // Edit tab state
+  const [edit, setEdit] = useState<EditableFields>({
+    title: event.title ?? "",
+    description: event.description ?? "",
+    category: event.category ?? "",
+    event_date: event.event_date ? event.event_date.slice(0, 10) : "",
+    location: event.location ?? "",
+  });
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState("");
+  const [saveSuccess, setSaveSuccess] = useState("");
 
   const upcoming = isUpcoming(event);
+
+  const handleSaveEdit = async () => {
+    setSaving(true); setSaveError(""); setSaveSuccess("");
+    const { error } = await supabase.from("events").update({
+      title: edit.title,
+      description: edit.description || null,
+      category: edit.category || null,
+      event_date: edit.event_date || null,
+      location: edit.location || null,
+    }).eq("id", event.id);
+    if (error) { setSaveError(error.message); }
+    else {
+      setSaveSuccess("Changes saved.");
+      setTimeout(() => setSaveSuccess(""), 3000);
+      onUpdated({ ...event, ...edit, category: edit.category || null, description: edit.description || null, event_date: edit.event_date || null, location: edit.location || null });
+    }
+    setSaving(false);
+  };
 
   useEffect(() => {
     if (activeTab !== "registrations") return;
@@ -685,17 +739,30 @@ function ActiveModal({
       setRegLoading(true);
       setRegError("");
       try {
-        const { data, error } = await supabase
+        // Fetch registrations first
+        const { data: regData, error: regErr } = await supabase
           .from("event_registrations")
-          .select("id, user_id, created_at, profiles(full_name, email, student_id, major)")
+          .select("id, user_id, created_at")
           .eq("event_id", event.id)
           .order("created_at", { ascending: false });
-        if (error) {
-          if (error.code === "42P01") setRegistrants([]);
-          else setRegError(error.message);
-        } else {
-          setRegistrants((data as unknown as Registrant[]) ?? []);
+        if (regErr) {
+          if (regErr.code === "42P01") { setRegistrants([]); setRegLoading(false); return; }
+          setRegError(regErr.message); setRegLoading(false); return;
         }
+        if (!regData || regData.length === 0) { setRegistrants([]); setRegLoading(false); return; }
+
+        // Then fetch profiles for those user IDs
+        const userIds = regData.map((r) => r.user_id);
+        const { data: profilesData } = await supabase
+          .from("profiles")
+          .select("id, full_name, email, student_id, major")
+          .in("id", userIds);
+
+        const merged = regData.map((r) => ({
+          ...r,
+          profiles: profilesData?.find((p) => p.id === r.user_id) ?? null,
+        }));
+        setRegistrants(merged as unknown as Registrant[]);
       } catch { setRegError("Failed to load registrations."); }
       setRegLoading(false);
     };
@@ -727,6 +794,7 @@ function ActiveModal({
 
   const tabs: { key: ModalTab; label: string }[] = [
     { key: "details", label: "Event Info" },
+    { key: "edit", label: "Edit" },
     { key: "registrations", label: "Registrations" },
     { key: "teams", label: "Teams" },
   ];
@@ -805,6 +873,40 @@ function ActiveModal({
                 </p>
               </div>
             )}
+          </div>
+        )}
+
+        {/* ── Edit ── */}
+        {activeTab === "edit" && (
+          <div className="flex flex-col gap-5 p-6">
+            {saveError && <AlertBox type="error">{saveError}</AlertBox>}
+            {saveSuccess && <AlertBox type="success">{saveSuccess}</AlertBox>}
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <div className="sm:col-span-2">
+                <Label>Title</Label>
+                <input type="text" value={edit.title} onChange={(e) => setEdit({ ...edit, title: e.target.value })} className={inputCls} />
+              </div>
+              <div>
+                <Label>Category</Label>
+                <input type="text" value={edit.category} onChange={(e) => setEdit({ ...edit, category: e.target.value })} placeholder="e.g. Workshop, Hackathon" className={inputCls} />
+              </div>
+              <div>
+                <Label>Date</Label>
+                <input type="date" value={edit.event_date} onChange={(e) => setEdit({ ...edit, event_date: e.target.value })} className={inputCls} />
+              </div>
+              <div className="sm:col-span-2">
+                <Label>Location</Label>
+                <input type="text" value={edit.location} onChange={(e) => setEdit({ ...edit, location: e.target.value })} placeholder="e.g. Room 101" className={inputCls} />
+              </div>
+              <div className="sm:col-span-2">
+                <Label>Description</Label>
+                <textarea rows={4} value={edit.description} onChange={(e) => setEdit({ ...edit, description: e.target.value })} className={`${inputCls} resize-none`} />
+              </div>
+            </div>
+            <button onClick={handleSaveEdit} disabled={saving} className="self-start rounded-xl bg-emerald-600 px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-700 disabled:opacity-60">
+              {saving ? "Saving…" : "Save changes"}
+            </button>
+            <p className="text-xs text-slate-400">Changes are reflected live on the homepage immediately after saving.</p>
           </div>
         )}
 
@@ -1018,16 +1120,127 @@ function PeopleIcon() {
   );
 }
 
+// ─── API Sources Panel ────────────────────────────────────────────────────────
+
+type ApiSource = { id: string; name: string; curl: string };
+
+function ApiSourcesPanel({ onClose }: { onClose: () => void }) {
+  const [sources, setSources] = useState<ApiSource[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [name, setName] = useState("");
+  const [curl, setCurl] = useState("");
+  const [err, setErr] = useState("");
+
+  const load = async () => {
+    const { data } = await supabase.from("site_settings").select("value").eq("key", "api_sources").single();
+    setSources((data?.value as ApiSource[]) ?? []);
+    setLoading(false);
+  };
+  useEffect(() => { load(); }, []);
+
+  const persist = async (next: ApiSource[]) => {
+    setSaving(true);
+    await supabase.from("site_settings").upsert({ key: "api_sources", value: next, updated_at: new Date().toISOString() });
+    setSources(next);
+    setSaving(false);
+  };
+
+  const handleAdd = () => {
+    if (!name.trim() || !curl.trim()) { setErr("Both name and cURL are required."); return; }
+    persist([...sources, { id: crypto.randomUUID(), name: name.trim(), curl: curl.trim() }]);
+    setName(""); setCurl(""); setErr("");
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" onClick={onClose}>
+      <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" />
+      <div className="relative flex max-h-[90vh] w-full max-w-2xl flex-col overflow-hidden rounded-3xl bg-white shadow-2xl" onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between border-b border-slate-100 px-6 py-5">
+          <div>
+            <h2 className="text-base font-bold text-slate-900">API Sources</h2>
+            <p className="text-xs text-slate-400">Manage cURL data sources for event discovery.</p>
+          </div>
+          <button onClick={onClose} className="rounded-xl p-2 text-slate-400 transition hover:bg-slate-100"><CloseIcon /></button>
+        </div>
+
+        <div className="flex-1 overflow-y-auto p-6 space-y-6">
+          {/* Built-in Devpost */}
+          <div>
+            <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">Built-in source</p>
+            <div className="flex items-center justify-between rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+              <div>
+                <p className="font-semibold text-slate-800 text-sm">Devpost — Recommended Hackathons</p>
+                <p className="text-xs text-slate-400 mt-0.5">https://devpost.com/api/hackathons/recommended_hackathons</p>
+              </div>
+              <span className="rounded-full bg-emerald-100 px-2.5 py-1 text-xs font-semibold text-emerald-700">Active</span>
+            </div>
+          </div>
+
+          {/* Custom sources */}
+          <div>
+            <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">Custom sources ({sources.length})</p>
+            {loading ? (
+              <div className="space-y-2">{[...Array(2)].map((_,i) => <div key={i} className="h-14 animate-pulse rounded-xl bg-slate-100" />)}</div>
+            ) : sources.length === 0 ? (
+              <p className="text-sm text-slate-400">No custom sources added yet.</p>
+            ) : (
+              <div className="space-y-2">
+                {sources.map(s => (
+                  <div key={s.id} className="rounded-xl border border-slate-200 bg-white p-4">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="font-semibold text-slate-800 text-sm">{s.name}</p>
+                        <pre className="mt-1 text-xs text-slate-400 whitespace-pre-wrap break-all line-clamp-3 font-mono">{s.curl}</pre>
+                      </div>
+                      <button onClick={() => persist(sources.filter(x => x.id !== s.id))} disabled={saving} className="flex-shrink-0 rounded-lg p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-500 transition disabled:opacity-40">
+                        <svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6" /><path d="M19 6l-1 14H6L5 6" /><path d="M10 11v6M14 11v6M9 6V4h6v2" /></svg>
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Add new */}
+          <div className="rounded-2xl border border-[#1e3a8a]/20 bg-[#f5f8ff] p-5">
+            <p className="mb-3 text-sm font-semibold text-slate-700">Add new source</p>
+            {err && <p className="mb-3 text-xs text-red-600">{err}</p>}
+            <div className="space-y-3">
+              <div>
+                <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-400">Source name</label>
+                <input type="text" value={name} onChange={e => setName(e.target.value)} placeholder="e.g. MLH Hackathons" className={inputCls} />
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-400">cURL command</label>
+                <textarea rows={5} value={curl} onChange={e => setCurl(e.target.value)} placeholder={"curl 'https://api.example.com/events' \\\n  -H 'accept: application/json'"} className={`${inputCls} resize-none font-mono text-xs`} />
+              </div>
+              <button onClick={handleAdd} disabled={saving} className="rounded-xl bg-[#1e3a8a] px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-[#1e40af] disabled:opacity-60">
+                {saving ? "Saving…" : "Add source"}
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 export default function AdminEventsPage() {
   const [events, setEvents] = useState<AdminEvent[]>([]);
   const [loading, setLoading] = useState(true);
+  const [devpostEvents, setDevpostEvents] = useState<AdminEvent[]>([]);
+  const [devpostLoading, setDevpostLoading] = useState(false);
+  const devpostFetchedRef = useRef(false);
   const [error, setError] = useState("");
   const [pageTab, setPageTab] = useState<PageTab>("pending");
   const [search, setSearch] = useState("");
   const [selectedPending, setSelectedPending] = useState<{ event: AdminEvent; isMock: boolean } | null>(null);
   const [selectedActive, setSelectedActive] = useState<AdminEvent | null>(null);
+  const [showSources, setShowSources] = useState(false);
 
   const loadEvents = async () => {
     setLoading(true);
@@ -1061,6 +1274,18 @@ export default function AdminEventsPage() {
     () => events.filter((e) => (e.approval_status ?? "pending") === "pending" || e.approval_status === "rejected"),
     [events]
   );
+
+  // Fetch Devpost once when DB has no pending events
+  useEffect(() => {
+    if (loading) return;
+    if (pendingEvents.length > 0) return;
+    if (devpostFetchedRef.current) return; // only fetch once per page load
+    devpostFetchedRef.current = true;
+    setDevpostLoading(true);
+    fetchDevpostEvents()
+      .then(setDevpostEvents)
+      .finally(() => setDevpostLoading(false));
+  }, [loading, pendingEvents.length]);
 
   const activeEvents = useMemo(
     () => events.filter((e) => e.approval_status === "approved"),
@@ -1101,17 +1326,36 @@ export default function AdminEventsPage() {
     setPageTab("active");
   };
 
-  const useMockPending = !loading && pendingEvents.length === 0;
-  const displayPending = useMockPending ? MOCK_EVENTS : filteredPending;
+  const useDevpost = !loading && pendingEvents.length === 0;
+  // Filter out Devpost events that have already been imported to the DB (matched by source_url)
+  const importedUrls = useMemo(
+    () => new Set(events.map((e) => e.source_url).filter(Boolean)),
+    [events]
+  );
+  const displayPending = useDevpost
+    ? devpostEvents.filter((de) => !de.source_url || !importedUrls.has(de.source_url))
+    : filteredPending;
 
   return (
     <div className="min-h-screen px-6 py-8 lg:px-10">
       {/* Page header */}
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold text-slate-900">Event Management</h1>
-        <p className="mt-1 text-sm text-slate-500">
-          Review and approve scraped events, or monitor live events and their participants.
-        </p>
+      <div className="mb-6 flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold text-slate-900">Event Management</h1>
+          <p className="mt-1 text-sm text-slate-500">
+            Review and approve events, or monitor live events and their participants.
+          </p>
+        </div>
+        <button
+          onClick={() => setShowSources(true)}
+          className="flex flex-shrink-0 items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 shadow-sm transition hover:border-[#1e3a8a] hover:text-[#1e3a8a]"
+        >
+          <svg width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+            <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
+            <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
+          </svg>
+          Manage Sources
+        </button>
       </div>
 
       {error && (
@@ -1155,28 +1399,26 @@ export default function AdminEventsPage() {
       {/* ── Pending tab ── */}
       {pageTab === "pending" && (
         <>
-          {useMockPending && (
-            <div className="mb-4 flex items-center gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-700">
-              <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                <circle cx="12" cy="12" r="10" /><path d="M12 8v4M12 16h.01" />
-              </svg>
-              <span>
-                <strong>No scraped events yet.</strong> Below is a preview of how events from the web scraper will appear.
-              </span>
+
+          {(loading || devpostLoading) ? (
+            <div className="flex flex-col items-center gap-4 py-16">
+              <div className="h-10 w-10 animate-spin rounded-full border-4 border-[#1e3a8a] border-t-transparent" />
+              <p className="text-sm text-slate-500">{loading ? "Loading events…" : "Fetching live events from Devpost…"}</p>
             </div>
-          )}
-          {loading ? (
-            <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-              {[...Array(4)].map((_, i) => <div key={i} className="h-52 animate-pulse rounded-2xl bg-slate-200" />)}
-            </div>
+          ) : displayPending.length === 0 ? (
+            <EmptyState
+              icon={<svg width="40" height="40" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2" /><path d="M16 2v4M8 2v4M3 10h18" /></svg>}
+              message="No pending events."
+              sub="All caught up — or Devpost returned no results."
+            />
           ) : (
             <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
               {displayPending.map((event) => (
                 <PendingCard
                   key={event.id}
                   event={event}
-                  isMock={useMockPending}
-                  onClick={() => setSelectedPending({ event, isMock: useMockPending })}
+                  isMock={useDevpost}
+                  onClick={() => setSelectedPending({ event, isMock: useDevpost })}
                 />
               ))}
             </div>
@@ -1216,19 +1458,46 @@ export default function AdminEventsPage() {
           isMock={selectedPending.isMock}
           onClose={() => setSelectedPending(null)}
           onUpdated={(updated) => {
-            setEvents((prev) => prev.map((e) => (e.id === updated.id ? updated : e)));
-            setSelectedPending((s) => s ? { ...s, event: updated } : null);
+            if (selectedPending.isMock) {
+              // Was Devpost — now in DB; remove from devpost list, reload DB events
+              setDevpostEvents((prev) => prev.filter((e) => e.id !== selectedPending.event.id));
+              loadEvents();
+            } else {
+              setEvents((prev) => prev.map((e) => (e.id === updated.id ? updated : e)));
+            }
+            setSelectedPending(null);
           }}
-          onApproved={handleApproved}
+          onApproved={(id) => {
+            if (selectedPending.isMock) {
+              setDevpostEvents((prev) => prev.filter((e) => e.id !== id));
+              loadEvents();
+              setPageTab("active");
+            } else {
+              handleApproved(id);
+            }
+            setSelectedPending(null);
+          }}
           onDeleted={(id) => {
-            setEvents((prev) => prev.filter((e) => e.id !== id));
+            if (selectedPending.isMock) {
+              setDevpostEvents((prev) => prev.filter((e) => e.id !== id));
+            } else {
+              setEvents((prev) => prev.filter((e) => e.id !== id));
+            }
             setSelectedPending(null);
           }}
         />
       )}
       {selectedActive && (
-        <ActiveModal event={selectedActive} onClose={() => setSelectedActive(null)} />
+        <ActiveModal
+          event={selectedActive}
+          onClose={() => setSelectedActive(null)}
+          onUpdated={(updated) => {
+            setEvents((prev) => prev.map((e) => (e.id === updated.id ? updated : e)));
+            setSelectedActive(updated);
+          }}
+        />
       )}
+      {showSources && <ApiSourcesPanel onClose={() => setShowSources(false)} />}
     </div>
   );
 }
