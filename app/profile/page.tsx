@@ -5,6 +5,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import AppNavbar from "../../components/AppNavbar";
+import { mergeJoinedClubs } from "../../lib/clubMembership";
 import { supabase } from "../../lib/supabase";
 
 type Profile = {
@@ -310,12 +311,15 @@ export default function ProfilePage() {
         "Could not load joined clubs:",
         clubMembershipsResult.error.message
       );
-      setJoinedClubs([]);
+      setJoinedClubs(await mergeJoinedClubs(userId, []));
     } else {
       setJoinedClubs(
-        ((clubMembershipsResult.data || []) as ClubMembership[])
-          .map(getClubFromMembership)
-          .filter(Boolean) as Club[]
+        await mergeJoinedClubs(
+          userId,
+          ((clubMembershipsResult.data || []) as ClubMembership[])
+            .map(getClubFromMembership)
+            .filter(Boolean) as Club[]
+        )
       );
     }
   };
@@ -1431,6 +1435,57 @@ export default function ProfilePage() {
                 </div>
               )}
             </div>
+
+            {!editing && (
+              <div className="mt-8">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <h3 className="text-sm font-semibold text-gray-500">
+                      Joined Clubs
+                    </h3>
+                    <p className="mt-1 text-sm text-gray-500">
+                      Clubs you are currently a member of.
+                    </p>
+                  </div>
+                  <Link
+                    href="/clubs"
+                    className="text-sm font-semibold text-[#1e3a8a] hover:underline"
+                  >
+                    View all clubs
+                  </Link>
+                </div>
+
+                {joinedClubs.length > 0 ? (
+                  <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                    {joinedClubs.map((club) => (
+                      <Link
+                        key={club.id}
+                        href={`/clubs/${club.id}`}
+                        className="rounded-xl border border-gray-200 bg-slate-50 p-4 transition hover:border-[#1e3a8a]/30 hover:bg-white"
+                      >
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="min-w-0">
+                            <p className="truncate font-semibold text-slate-900">
+                              {getClubName(club)}
+                            </p>
+                            <p className="mt-1 text-sm text-slate-500">
+                              {club.category || "Club"}
+                            </p>
+                          </div>
+                          <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700">
+                            Joined
+                          </span>
+                        </div>
+                      </Link>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="mt-4 rounded-xl border border-dashed border-gray-300 bg-slate-50 p-4 text-sm text-slate-500">
+                    No joined clubs yet.
+                  </div>
+                )}
+              </div>
+            )}
 
             {editing && (
               <div className="mt-8 flex justify-end">

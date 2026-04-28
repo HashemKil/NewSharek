@@ -4,6 +4,15 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import AppNavbar from "../../components/AppNavbar";
+import {
+  cacheJoinedClubSummary,
+  getCachedJoinedClubIds,
+  joinClubMembership,
+  leaveClubMembership,
+  mergeJoinedClubIds,
+  mergeJoinedClubs,
+  uncacheJoinedClubSummary,
+} from "../../lib/clubMembership";
 import { supabase } from "../../lib/supabase";
 
 type ClubRow = {
@@ -205,12 +214,30 @@ export default function ClubsPage() {
         if (membershipsResult.error) {
           console.error("CLUB MEMBERSHIPS LOAD ERROR:", membershipsResult.error);
           setClubMembershipsAvailable(false);
-          setJoinedClubIds([]);
+          setJoinedClubIds(getCachedJoinedClubIds(user.id));
         } else {
+          void mergeJoinedClubs(
+            user.id,
+            loadedClubs
+              .filter((club) =>
+                ((membershipsResult.data || []) as ClubMemberRow[]).some(
+                  (membership) => membership.club_id === club.id
+                )
+              )
+              .map((club) => ({
+                id: club.id,
+                name: club.name,
+                title: club.title,
+                category: club.category,
+              }))
+          );
           setClubMembershipsAvailable(true);
           setJoinedClubIds(
-            ((membershipsResult.data || []) as ClubMemberRow[]).map(
+            mergeJoinedClubIds(
+              user.id,
+              ((membershipsResult.data || []) as ClubMemberRow[]).map(
               (membership) => membership.club_id
+              )
             )
           );
         }
@@ -244,6 +271,14 @@ export default function ClubsPage() {
     });
   }, [clubs, search, selectedCategory]);
 
+  const joinedClubs = useMemo(
+    () =>
+      clubs.filter((club) => joinedClubIds.includes(club.id)).sort((a, b) => {
+        return a.displayName.localeCompare(b.displayName);
+      }),
+    [clubs, joinedClubIds]
+  );
+
   const resetFilters = () => {
     setSearch("");
     setSelectedCategory("All Clubs");
@@ -259,27 +294,54 @@ export default function ClubsPage() {
     );
   };
 
+  const reloadJoinedClubIds = async (currentUserId: string) => {
+    const { data, error: membershipsError } = await supabase
+      .from("club_members")
+      .select("club_id")
+      .eq("user_id", currentUserId);
+
+    if (membershipsError) {
+      throw new Error(membershipsError.message);
+    }
+
+    return mergeJoinedClubIds(
+      currentUserId,
+      ((data || []) as ClubMemberRow[]).map(
+        (membership) => membership.club_id
+      )
+    );
+  };
+
   const handleJoinClub = async (clubId: string) => {
     if (!userId) return;
 
     setClubActionId(clubId);
     setError("");
 
-    const { error: joinError } = await supabase.rpc("join_club", {
-      target_club_id: clubId,
-    });
+    try {
+      await joinClubMembership(clubId, userId);
+      const joinedClub = clubs.find((club) => club.id === clubId);
+      if (joinedClub) {
+        cacheJoinedClubSummary(userId, {
+          id: joinedClub.id,
+          name: joinedClub.name,
+          title: joinedClub.title,
+          category: joinedClub.category,
+        });
+      }
+      const nextJoinedClubIds = await reloadJoinedClubIds(userId);
 
-    if (joinError) {
+      setJoinedClubIds(nextJoinedClubIds);
+
+      if (nextJoinedClubIds.includes(clubId)) {
+        updateClubMemberCount(clubId, 1);
+      }
+    } catch (joinError) {
       setError(
-        joinError.message.toLowerCase().includes("schema cache")
-          ? "Club joining is not ready in Supabase yet. Run the latest club_members SQL and reload the schema."
-          : joinError.message
+        joinError instanceof Error
+          ? joinError.message
+          : "Could not join this club right now."
       );
-    } else {
-      setJoinedClubIds((current) =>
-        current.includes(clubId) ? current : [...current, clubId]
-      );
-      updateClubMemberCount(clubId, 1);
     }
 
     setClubActionId("");
@@ -291,19 +353,22 @@ export default function ClubsPage() {
     setClubActionId(clubId);
     setError("");
 
-    const { error: leaveError } = await supabase.rpc("leave_club", {
-      target_club_id: clubId,
-    });
+    try {
+      await leaveClubMembership(clubId, userId);
+      uncacheJoinedClubSummary(userId, clubId);
+      const nextJoinedClubIds = await reloadJoinedClubIds(userId);
 
-    if (leaveError) {
+      setJoinedClubIds(nextJoinedClubIds);
+
+      if (!nextJoinedClubIds.includes(clubId)) {
+        updateClubMemberCount(clubId, -1);
+      }
+    } catch (leaveError) {
       setError(
-        leaveError.message.toLowerCase().includes("schema cache")
-          ? "Club leaving is not ready in Supabase yet. Run the latest club_members SQL and reload the schema."
-          : leaveError.message
+        leaveError instanceof Error
+          ? leaveError.message
+          : "Could not leave this club right now."
       );
-    } else {
-      setJoinedClubIds((current) => current.filter((id) => id !== clubId));
-      updateClubMemberCount(clubId, -1);
     }
 
     setClubActionId("");
@@ -393,140 +458,210 @@ export default function ClubsPage() {
             )}
 
             {filteredClubs.length > 0 ? (
-              <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
-                {filteredClubs.map((club) => {
-                  const logo = club.logo_url || club.image_url || "";
+              <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_320px]">
+                <div className="grid gap-5 md:grid-cols-2">
+                  {filteredClubs.map((club) => {
+                    const logo = club.logo_url || club.image_url || "";
 
-                  return (
-                    <article
-                      key={club.id}
-                      className="rounded-[24px] border border-slate-200 bg-white p-5 shadow-sm transition hover:border-[#1e3a8a]/30 hover:shadow-md"
-                    >
-                      <div className="flex items-start gap-4">
-                        {logo ? (
-                          <div
-                            aria-label={`${club.displayName} logo`}
-                            className="h-16 w-16 rounded-lg border border-slate-200 bg-cover bg-center"
-                            style={{ backgroundImage: `url(${logo})` }}
-                          />
-                        ) : (
-                          <div className="flex h-16 w-16 items-center justify-center rounded-lg border border-[#c7d5fb] bg-[#eef3ff] text-xl font-bold text-[#1e3a8a]">
-                            {club.displayName.slice(0, 1).toUpperCase()}
+                    return (
+                      <article
+                        key={club.id}
+                        className="rounded-[24px] border border-slate-200 bg-white p-5 shadow-sm transition hover:border-[#1e3a8a]/30 hover:shadow-md"
+                      >
+                        <div className="flex items-start gap-4">
+                          {logo ? (
+                            <div
+                              aria-label={`${club.displayName} logo`}
+                              className="h-16 w-16 rounded-lg border border-slate-200 bg-cover bg-center"
+                              style={{ backgroundImage: `url(${logo})` }}
+                            />
+                          ) : (
+                            <div className="flex h-16 w-16 items-center justify-center rounded-lg border border-[#c7d5fb] bg-[#eef3ff] text-xl font-bold text-[#1e3a8a]">
+                              {club.displayName.slice(0, 1).toUpperCase()}
+                            </div>
+                          )}
+
+                          <div className="min-w-0 flex-1">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <span className="rounded-full border border-slate-200 bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700">
+                                {club.category || "Club"}
+                              </span>
+                              <span className="rounded-full border border-sky-200 bg-sky-50 px-3 py-1 text-xs font-semibold text-sky-700">
+                                {club.eventCount} event{club.eventCount !== 1 ? "s" : ""}
+                              </span>
+                              <span className="rounded-full border border-[#c7d5fb] bg-[#eef3ff] px-3 py-1 text-xs font-semibold text-[#1e3a8a]">
+                                {club.memberCount} member{club.memberCount !== 1 ? "s" : ""}
+                              </span>
+                            </div>
+
+                            <h3 className="mt-3 text-xl font-semibold text-slate-900">
+                              {club.displayName}
+                            </h3>
+                            {club.location && (
+                              <p className="mt-1 text-sm text-slate-500">
+                                {club.location}
+                              </p>
+                            )}
+                          </div>
+                        </div>
+
+                        <p className="mt-4 line-clamp-4 text-sm leading-6 text-slate-600">
+                          {club.description || "No description added yet."}
+                        </p>
+
+                        {club.upcomingEvents.length > 0 && (
+                          <div className="mt-5 border-t border-slate-100 pt-4">
+                            <p className="text-xs font-semibold uppercase text-slate-400">
+                              Events
+                            </p>
+                            <div className="mt-3 space-y-2">
+                              {club.upcomingEvents.map((event) => (
+                                <Link
+                                  key={event.id}
+                                  href={`/events/${event.id}`}
+                                  className="block rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-700 transition hover:border-[#1e3a8a]/40 hover:bg-slate-50"
+                                >
+                                  <span className="font-semibold">
+                                    {event.title || "Untitled event"}
+                                  </span>
+                                  <span className="mt-1 block text-xs text-slate-500">
+                                    {formatDate(event.event_date)}
+                                  </span>
+                                </Link>
+                              ))}
+                            </div>
                           </div>
                         )}
 
-                        <div className="min-w-0 flex-1">
-                          <div className="flex flex-wrap items-center gap-2">
-                            <span className="rounded-full border border-slate-200 bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700">
-                              {club.category || "Club"}
-                            </span>
-                            <span className="rounded-full border border-sky-200 bg-sky-50 px-3 py-1 text-xs font-semibold text-sky-700">
-                              {club.eventCount} event{club.eventCount !== 1 ? "s" : ""}
-                            </span>
-                            <span className="rounded-full border border-[#c7d5fb] bg-[#eef3ff] px-3 py-1 text-xs font-semibold text-[#1e3a8a]">
-                              {club.memberCount} member{club.memberCount !== 1 ? "s" : ""}
-                            </span>
-                          </div>
-
-                          <h3 className="mt-3 text-xl font-semibold text-slate-900">
-                            {club.displayName}
-                          </h3>
-                          {club.location && (
-                            <p className="mt-1 text-sm text-slate-500">
-                              {club.location}
-                            </p>
+                        <div className="mt-5 flex flex-wrap gap-2">
+                          <Link
+                            href={`/clubs/${club.id}`}
+                            className="rounded-lg border border-[#c7d5fb] bg-[#eef3ff] px-3 py-2 text-sm font-semibold text-[#1e3a8a] transition hover:bg-[#dfe8ff]"
+                          >
+                            View club
+                          </Link>
+                          {clubMembershipsAvailable && (
+                            joinedClubIds.includes(club.id) ? (
+                              <button
+                                type="button"
+                                onClick={() => handleLeaveClub(club.id)}
+                                disabled={clubActionId === club.id}
+                                className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm font-semibold text-red-600 transition hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-60"
+                              >
+                                {clubActionId === club.id ? "Leaving..." : "Leave club"}
+                              </button>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() => handleJoinClub(club.id)}
+                                disabled={clubActionId === club.id}
+                                className="rounded-lg bg-[#1e3a8a] px-3 py-2 text-sm font-semibold text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
+                              >
+                                {clubActionId === club.id ? "Joining..." : "Join club"}
+                              </button>
+                            )
+                          )}
+                          {club.website_url && (
+                            <a
+                              href={club.website_url}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+                            >
+                              Website
+                            </a>
+                          )}
+                          {club.instagram_url && (
+                            <a
+                              href={club.instagram_url}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+                            >
+                              Instagram
+                            </a>
+                          )}
+                          {club.email && (
+                            <a
+                              href={`mailto:${club.email}`}
+                              className="rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+                            >
+                              Email
+                            </a>
                           )}
                         </div>
-                      </div>
+                      </article>
+                    );
+                  })}
+                </div>
 
-                      <p className="mt-4 line-clamp-4 text-sm leading-6 text-slate-600">
-                        {club.description || "No description added yet."}
+                <aside className="h-fit rounded-[24px] border border-slate-200 bg-white p-5 shadow-sm xl:sticky xl:top-20">
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <p className="text-xs font-semibold uppercase tracking-wide text-[#1e3a8a]">
+                        Joined Clubs
                       </p>
+                      <h3 className="mt-1 text-lg font-semibold text-slate-900">
+                        Your memberships
+                      </h3>
+                    </div>
+                    <span className="rounded-full border border-[#c7d5fb] bg-[#eef3ff] px-3 py-1 text-xs font-semibold text-[#1e3a8a]">
+                      {joinedClubs.length}
+                    </span>
+                  </div>
 
-                      {club.upcomingEvents.length > 0 && (
-                        <div className="mt-5 border-t border-slate-100 pt-4">
-                          <p className="text-xs font-semibold uppercase text-slate-400">
-                            Events
-                          </p>
-                          <div className="mt-3 space-y-2">
-                            {club.upcomingEvents.map((event) => (
-                              <Link
-                                key={event.id}
-                                href={`/events/${event.id}`}
-                                className="block rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-700 transition hover:border-[#1e3a8a]/40 hover:bg-slate-50"
-                              >
-                                <span className="font-semibold">
-                                  {event.title || "Untitled event"}
-                                </span>
-                                <span className="mt-1 block text-xs text-slate-500">
-                                  {formatDate(event.event_date)}
-                                </span>
-                              </Link>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-
-                      <div className="mt-5 flex flex-wrap gap-2">
-                        <Link
-                          href={`/clubs/${club.id}`}
-                          className="rounded-lg border border-[#c7d5fb] bg-[#eef3ff] px-3 py-2 text-sm font-semibold text-[#1e3a8a] transition hover:bg-[#dfe8ff]"
+                  {joinedClubs.length > 0 ? (
+                    <div className="mt-5 space-y-3">
+                      {joinedClubs.map((club) => (
+                        <div
+                          key={club.id}
+                          className="rounded-2xl border border-slate-200 bg-slate-50 p-4"
                         >
-                          View club
-                        </Link>
-                        {clubMembershipsAvailable && (
-                          joinedClubIds.includes(club.id) ? (
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="min-w-0">
+                              <p className="truncate font-semibold text-slate-900">
+                                {club.displayName}
+                              </p>
+                              <p className="mt-1 text-xs text-slate-500">
+                                {club.category || "Club"} · {club.memberCount} member
+                                {club.memberCount !== 1 ? "s" : ""}
+                              </p>
+                            </div>
+                            <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-[11px] font-semibold text-emerald-700">
+                              Joined
+                            </span>
+                          </div>
+
+                          <div className="mt-3 flex flex-wrap gap-2">
+                            <Link
+                              href={`/clubs/${club.id}`}
+                              className="rounded-lg border border-[#c7d5fb] bg-white px-3 py-2 text-xs font-semibold text-[#1e3a8a] transition hover:bg-[#eef3ff]"
+                            >
+                              Open
+                            </Link>
                             <button
                               type="button"
                               onClick={() => handleLeaveClub(club.id)}
                               disabled={clubActionId === club.id}
-                              className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm font-semibold text-red-600 transition hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-60"
+                              className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs font-semibold text-red-600 transition hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-60"
                             >
-                              {clubActionId === club.id ? "Leaving..." : "Leave club"}
+                              {clubActionId === club.id ? "Leaving..." : "Leave"}
                             </button>
-                          ) : (
-                            <button
-                              type="button"
-                              onClick={() => handleJoinClub(club.id)}
-                              disabled={clubActionId === club.id}
-                              className="rounded-lg bg-[#1e3a8a] px-3 py-2 text-sm font-semibold text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
-                            >
-                              {clubActionId === club.id ? "Joining..." : "Join club"}
-                            </button>
-                          )
-                        )}
-                        {club.website_url && (
-                          <a
-                            href={club.website_url}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
-                          >
-                            Website
-                          </a>
-                        )}
-                        {club.instagram_url && (
-                          <a
-                            href={club.instagram_url}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
-                          >
-                            Instagram
-                          </a>
-                        )}
-                        {club.email && (
-                          <a
-                            href={`mailto:${club.email}`}
-                            className="rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
-                          >
-                            Email
-                          </a>
-                        )}
-                      </div>
-                    </article>
-                  );
-                })}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="mt-5 rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-5 text-center">
+                      <p className="text-sm font-medium text-slate-600">
+                        No joined clubs yet
+                      </p>
+                      <p className="mt-2 text-xs leading-5 text-slate-500">
+                        Join a club from the list and it will appear here.
+                      </p>
+                    </div>
+                  )}
+                </aside>
               </div>
             ) : (
               <div className="rounded-[28px] border border-dashed border-slate-300 bg-white p-10 text-center">

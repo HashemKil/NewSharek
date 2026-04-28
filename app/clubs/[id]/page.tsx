@@ -4,6 +4,13 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import AppNavbar from "../../../components/AppNavbar";
+import {
+  cacheJoinedClubSummary,
+  getCachedJoinedClubIds,
+  joinClubMembership,
+  leaveClubMembership,
+  uncacheJoinedClubSummary,
+} from "../../../lib/clubMembership";
 import { supabase } from "../../../lib/supabase";
 
 type ClubRow = {
@@ -97,6 +104,34 @@ export default function ClubDetailsPage() {
   const [actionLoading, setActionLoading] = useState(false);
   const [clubMembershipsAvailable, setClubMembershipsAvailable] = useState(true);
 
+  const reloadMembershipState = async (currentUserId: string, currentClubId: string) => {
+    const [membershipResult, memberCountsResult] = await Promise.all([
+      supabase
+        .from("club_members")
+        .select("club_id")
+        .eq("club_id", currentClubId)
+        .eq("user_id", currentUserId),
+      supabase.rpc("get_club_member_counts"),
+    ]);
+
+    if (membershipResult.error) {
+      throw new Error(membershipResult.error.message);
+    }
+
+    if (memberCountsResult.error) {
+      throw new Error(memberCountsResult.error.message);
+    }
+
+    const counts = (memberCountsResult.data || []) as ClubMemberCountRow[];
+    const nextCount =
+      counts.find((item) => item.club_id === currentClubId)?.member_count ?? 0;
+
+    return {
+      isMember: (membershipResult.data || []).length > 0,
+      memberCount: nextCount,
+    };
+  };
+
   useEffect(() => {
     const loadClub = async () => {
       setLoading(true);
@@ -165,10 +200,13 @@ export default function ClubDetailsPage() {
         if (membershipResult.error) {
           console.error("CLUB MEMBERSHIP LOAD ERROR:", membershipResult.error);
           setClubMembershipsAvailable(false);
-          setIsMember(false);
+          setIsMember(getCachedJoinedClubIds(user.id).includes(clubId));
         } else {
           setClubMembershipsAvailable(true);
-          setIsMember((membershipResult.data || []).length > 0);
+          setIsMember(
+            (membershipResult.data || []).length > 0 ||
+              getCachedJoinedClubIds(user.id).includes(clubId)
+          );
         }
 
         const counts = (memberCountsResult.data || []) as ClubMemberCountRow[];
@@ -191,19 +229,23 @@ export default function ClubDetailsPage() {
     setActionLoading(true);
     setError("");
 
-    const { error: joinError } = await supabase.rpc("join_club", {
-      target_club_id: club.id,
-    });
-
-    if (joinError) {
+    try {
+      await joinClubMembership(club.id, userId);
+      cacheJoinedClubSummary(userId, {
+        id: club.id,
+        name: club.name,
+        title: club.title,
+        category: club.category,
+      });
+      const nextState = await reloadMembershipState(userId, club.id);
+      setIsMember(nextState.isMember || getCachedJoinedClubIds(userId).includes(club.id));
+      setMemberCount(nextState.memberCount);
+    } catch (joinError) {
       setError(
-        joinError.message.toLowerCase().includes("schema cache")
-          ? "Club joining is not ready in Supabase yet. Run the latest club_members SQL and reload the schema."
-          : joinError.message
+        joinError instanceof Error
+          ? joinError.message
+          : "Could not join this club right now."
       );
-    } else {
-      setIsMember(true);
-      setMemberCount((current) => current + 1);
     }
 
     setActionLoading(false);
@@ -215,19 +257,18 @@ export default function ClubDetailsPage() {
     setActionLoading(true);
     setError("");
 
-    const { error: leaveError } = await supabase.rpc("leave_club", {
-      target_club_id: club.id,
-    });
-
-    if (leaveError) {
+    try {
+      await leaveClubMembership(club.id, userId);
+      uncacheJoinedClubSummary(userId, club.id);
+      const nextState = await reloadMembershipState(userId, club.id);
+      setIsMember(nextState.isMember);
+      setMemberCount(nextState.memberCount);
+    } catch (leaveError) {
       setError(
-        leaveError.message.toLowerCase().includes("schema cache")
-          ? "Club leaving is not ready in Supabase yet. Run the latest club_members SQL and reload the schema."
-          : leaveError.message
+        leaveError instanceof Error
+          ? leaveError.message
+          : "Could not leave this club right now."
       );
-    } else {
-      setIsMember(false);
-      setMemberCount((current) => Math.max(current - 1, 0));
     }
 
     setActionLoading(false);

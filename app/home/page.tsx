@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import AppNavbar from "../../components/AppNavbar";
+import { mergeJoinedClubs } from "../../lib/clubMembership";
 import { supabase } from "../../lib/supabase";
 
 type Profile = {
@@ -230,11 +231,22 @@ export default function HomePage() {
           ((eventRegistrationsResult.data || []) as EventRegistrationRow[]).filter(Boolean)
         );
         setClubs(((clubsResult.data || []) as ClubRow[]).filter(Boolean));
-        setJoinedClubs(
-          ((clubMembershipsResult.data || []) as ClubMembershipRow[])
-            .map(getClubFromMembership)
-            .filter(Boolean) as ClubRow[]
-        );
+        if (clubMembershipsResult.error) {
+          console.warn(
+            "Could not load joined clubs:",
+            clubMembershipsResult.error.message
+          );
+          setJoinedClubs(await mergeJoinedClubs(user.id, []));
+        } else {
+          setJoinedClubs(
+            await mergeJoinedClubs(
+              user.id,
+              ((clubMembershipsResult.data || []) as ClubMembershipRow[])
+                .map(getClubFromMembership)
+                .filter(Boolean) as ClubRow[]
+            )
+          );
+        }
         setTeams(((teamsResult.data || []) as TeamRow[]).filter(Boolean));
         setMemberships(((membershipsResult.data || []) as TeamMemberRow[]).filter(Boolean));
       } catch (err) {
