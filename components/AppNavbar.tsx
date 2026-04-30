@@ -9,6 +9,7 @@ export default function AppNavbar() {
   const pathname = usePathname();
   const router = useRouter();
   const [isAdmin, setIsAdmin] = useState(false);
+  const [isClubAdmin, setIsClubAdmin] = useState(false);
 
   // On mount, check if the logged-in user is an admin
   useEffect(() => {
@@ -21,11 +22,12 @@ export default function AppNavbar() {
 
       const { data: profile } = await supabase
         .from("profiles")
-        .select("is_admin")
+        .select("is_admin, is_club_admin")
         .eq("id", user.id)
         .single();
 
       setIsAdmin(profile?.is_admin === true);
+      setIsClubAdmin(profile?.is_club_admin === true);
     };
 
     checkAdmin();
@@ -89,6 +91,19 @@ export default function AppNavbar() {
               }`}
             >
               ⚙ Admin
+            </Link>
+          )}
+
+          {isClubAdmin && (
+            <Link
+              href="/club-admin"
+              className={`rounded-lg px-4 py-2 text-sm font-medium transition ${
+                pathname.startsWith("/club-admin")
+                  ? "bg-emerald-50 text-emerald-700"
+                  : "text-emerald-600 hover:bg-emerald-50 hover:text-emerald-700"
+              }`}
+            >
+              Club Admin
             </Link>
           )}
 
