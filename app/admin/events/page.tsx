@@ -1470,6 +1470,7 @@ export default function AdminEventsPage() {
             }}
             disabled={zincSyncing}
             className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 shadow-sm transition hover:border-emerald-500 hover:text-emerald-700 disabled:opacity-60"
+          id="sync-webscrapers-btn"
           >
             {zincSyncing ? (
               <svg className="animate-spin" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -1481,7 +1482,7 @@ export default function AdminEventsPage() {
                 <path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10M23 14l-4.64 4.36A9 9 0 0 1 3.51 15" />
               </svg>
             )}
-            {zincSyncing ? "Syncing…" : "Sync Zinc"}
+            {zincSyncing ? "Syncing…" : "Sync Webscrapers"}
           </button>
 
           <button
