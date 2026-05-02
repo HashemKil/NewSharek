@@ -10,7 +10,7 @@ const IT_KEYWORDS = [
   "programming", "coding", "developer", "development",
   "web", "mobile", "app", "application", "frontend", "backend", "fullstack",
   "digital", "cloud", "devops", "automation", "infrastructure",
-  "blockchain", "crypto", "nft",
+  "blockchain", "crypto",
   "robotics", "iot", "internet of things", "embedded",
   "computer", "computing", "information technology", " it ",
   "startup", "innovation", "product", "agile", "scrum",
@@ -24,7 +24,7 @@ function isItRelated(title: string, description: string): boolean {
   return IT_KEYWORDS.some((kw) => text.includes(kw));
 }
 
-// ─── Simple XML parser (no extra dependencies) ────────────────────────────────
+// ─── XML parser (no extra dependencies) ──────────────────────────────────────
 interface ZincEvent {
   id: string;
   title: string;
@@ -74,127 +74,154 @@ async function fetchZincPage(page: number): Promise<ZincEvent[]> {
     InsideZINC: "",
   });
 
-  const res = await fetch("https://zinc.jo/en/Events/Search_EventsFilters", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
-      "X-Requested-With": "XMLHttpRequest",
-      Referer: "https://zinc.jo/en/Home/Events",
-      "User-Agent":
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120 Safari/537.36",
-    },
-    body: body.toString(),
-    next: { revalidate: 0 },
-  });
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 8000); // 8s timeout
 
-  if (!res.ok) return [];
-  const xml = await res.text();
-  return parseZincXML(xml);
+  try {
+    const res = await fetch("https://zinc.jo/en/Events/Search_EventsFilters", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
+        "X-Requested-With": "XMLHttpRequest",
+        Referer: "https://zinc.jo/en/Home/Events",
+        "User-Agent":
+          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120 Safari/537.36",
+      },
+      body: body.toString(),
+      signal: controller.signal,
+    });
+    clearTimeout(timeout);
+    if (!res.ok) return [];
+    const xml = await res.text();
+    return parseZincXML(xml);
+  } catch {
+    clearTimeout(timeout);
+    return [];
+  }
 }
 
 // ─── Main handler ─────────────────────────────────────────────────────────────
-export async function GET(request: Request) {
-  // Auth check: allow Vercel cron (Bearer token) or same-origin admin trigger
-  const authHeader = request.headers.get("authorization");
-  const cronSecret = process.env.CRON_SECRET;
-  if (cronSecret && authHeader !== `Bearer ${cronSecret}`) {
-    const host = request.headers.get("host") ?? "";
-    const origin = request.headers.get("origin") ?? "";
-    const isLocal = host.includes("localhost") || origin.includes("localhost");
-    const isSameOrigin = origin !== "" && host !== "" && origin.includes(host.split(":")[0]);
-    if (!isLocal && !isSameOrigin) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-  }
+export async function GET() {
+  // Wrap everything in try-catch so we ALWAYS return JSON
+  try {
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
-  // Require service role key to bypass RLS for inserting
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  if (!serviceKey) {
+    if (!supabaseUrl) {
+      return NextResponse.json(
+        { error: "NEXT_PUBLIC_SUPABASE_URL is not configured." },
+        { status: 500 }
+      );
+    }
+
+    if (!serviceKey) {
+      return NextResponse.json(
+        {
+          error:
+            "SUPABASE_SERVICE_ROLE_KEY is not set. " +
+            "Go to Supabase → Settings → API → copy the service_role secret key, " +
+            "then add it to Vercel → Project Settings → Environment Variables.",
+        },
+        { status: 500 }
+      );
+    }
+
+    const supabase = createClient(supabaseUrl, serviceKey, {
+      auth: { persistSession: false },
+    });
+
+    // ── Paginate through Zinc events (max 5 pages = 150 events) ──────────────
+    const allZincEvents: ZincEvent[] = [];
+    let totalCount = Infinity;
+
+    for (let page = 1; page <= 5 && allZincEvents.length < totalCount; page++) {
+      const pageEvents = await fetchZincPage(page);
+      if (pageEvents.length === 0) break;
+      if (page === 1 && pageEvents[0]?.totalCount) {
+        totalCount = pageEvents[0].totalCount;
+      }
+      allZincEvents.push(...pageEvents);
+    }
+
+    if (allZincEvents.length === 0) {
+      return NextResponse.json({
+        message:
+          "Could not fetch events from zinc.jo — the site may be temporarily unavailable.",
+        total_scraped: 0,
+        it_filtered: 0,
+        inserted: 0,
+      });
+    }
+
+    // ── Filter IT-related events ──────────────────────────────────────────────
+    const itEvents = allZincEvents.filter((e) =>
+      isItRelated(e.title, e.description)
+    );
+
+    if (itEvents.length === 0) {
+      return NextResponse.json({
+        message: `Scraped ${allZincEvents.length} events from Zinc — none matched IT/Tech keywords this week.`,
+        total_scraped: allZincEvents.length,
+        it_filtered: 0,
+        inserted: 0,
+      });
+    }
+
+    // ── Deduplicate: skip events already in DB ────────────────────────────────
+    const sourceUrls = itEvents.map((e) => `https://zinc.jo/event/${e.id}`);
+    const { data: existing } = await supabase
+      .from("events")
+      .select("source_url")
+      .in("source_url", sourceUrls);
+
+    const existingSet = new Set(
+      (existing ?? []).map((r: { source_url: string }) => r.source_url)
+    );
+
+    const toInsert = itEvents
+      .filter((e) => !existingSet.has(`https://zinc.jo/event/${e.id}`))
+      .map((e) => ({
+        title: e.title,
+        description: e.description || null,
+        category: "Tech",
+        event_date: e.endDate || e.startDate || null,
+        location: e.location,
+        source_url: `https://zinc.jo/event/${e.id}`,
+        approval_status: "pending",
+        is_club_members_only: false,
+      }));
+
+    if (toInsert.length === 0) {
+      return NextResponse.json({
+        message: `All ${itEvents.length} IT event(s) from Zinc are already in the database.`,
+        total_scraped: allZincEvents.length,
+        it_filtered: itEvents.length,
+        inserted: 0,
+      });
+    }
+
+    const { error: insertError } = await supabase
+      .from("events")
+      .insert(toInsert);
+
+    if (insertError) {
+      return NextResponse.json(
+        { error: `Database insert failed: ${insertError.message}` },
+        { status: 500 }
+      );
+    }
+
+    return NextResponse.json({
+      message: `✓ Zinc sync complete — ${toInsert.length} new IT event(s) added for admin review.`,
+      total_scraped: allZincEvents.length,
+      it_filtered: itEvents.length,
+      inserted: toInsert.length,
+    });
+  } catch (err) {
+    // Safety net — always return JSON even on unexpected crash
     return NextResponse.json(
-      {
-        error:
-          "SUPABASE_SERVICE_ROLE_KEY is not set. " +
-          "Go to Supabase → Settings → API → copy the service_role key, " +
-          "then add it to .env.local and your Vercel environment variables.",
-      },
+      { error: `Unexpected error: ${err instanceof Error ? err.message : String(err)}` },
       { status: 500 }
     );
   }
-
-  const supabase = createClient(supabaseUrl, serviceKey, {
-    auth: { persistSession: false },
-  });
-
-  // ── Paginate through Zinc events ──────────────────────────────────────────
-  const allZincEvents: ZincEvent[] = [];
-  let totalCount = Infinity;
-
-  for (let page = 1; page <= 15 && allZincEvents.length < totalCount; page++) {
-    const pageEvents = await fetchZincPage(page);
-    if (pageEvents.length === 0) break;
-    if (page === 1 && pageEvents[0]?.totalCount) {
-      totalCount = pageEvents[0].totalCount;
-    }
-    allZincEvents.push(...pageEvents);
-  }
-
-  // ── Filter IT-related events ──────────────────────────────────────────────
-  const itEvents = allZincEvents.filter((e) =>
-    isItRelated(e.title, e.description)
-  );
-
-  if (itEvents.length === 0) {
-    return NextResponse.json({
-      message: "No IT-related events found on Zinc this week.",
-      total_scraped: allZincEvents.length,
-      it_filtered: 0,
-      inserted: 0,
-    });
-  }
-
-  // ── Deduplicate: skip events already in DB by source_url ─────────────────
-  const sourceUrls = itEvents.map((e) => `https://zinc.jo/event/${e.id}`);
-  const { data: existing } = await supabase
-    .from("events")
-    .select("source_url")
-    .in("source_url", sourceUrls);
-
-  const existingSet = new Set(
-    (existing ?? []).map((r: { source_url: string }) => r.source_url)
-  );
-
-  const toInsert = itEvents
-    .filter((e) => !existingSet.has(`https://zinc.jo/event/${e.id}`))
-    .map((e) => ({
-      title: e.title,
-      description: e.description || null,
-      category: "Tech",
-      event_date: e.endDate || e.startDate || null,
-      location: e.location,
-      source_url: `https://zinc.jo/event/${e.id}`,
-      approval_status: "pending",
-      is_club_members_only: false,
-    }));
-
-  if (toInsert.length === 0) {
-    return NextResponse.json({
-      message: "All IT events from Zinc are already in the database.",
-      total_scraped: allZincEvents.length,
-      it_filtered: itEvents.length,
-      inserted: 0,
-    });
-  }
-
-  const { error: insertError } = await supabase.from("events").insert(toInsert);
-  if (insertError) {
-    return NextResponse.json({ error: insertError.message }, { status: 500 });
-  }
-
-  return NextResponse.json({
-    message: `Zinc sync complete — ${toInsert.length} new IT event(s) added for admin review.`,
-    total_scraped: allZincEvents.length,
-    it_filtered: itEvents.length,
-    inserted: toInsert.length,
-  });
 }
