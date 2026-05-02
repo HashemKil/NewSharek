@@ -74,7 +74,8 @@ async function fetchDevpostEvents(): Promise<AdminEvent[]> {
       location: (h.location as string) ?? null,
       approval_status: "pending",
       created_at: new Date().toISOString(),
-      source_url: "https://example.com/hackathon-2025",
+      // Use the real hackathon URL so each event has a unique source_url
+      source_url: (h.url as string) ?? `https://devpost.com/hackathons/${h.id}` ?? null,
       is_club_members_only: false,
     })),
     {
@@ -1249,6 +1250,8 @@ export default function AdminEventsPage() {
   const [selectedPending, setSelectedPending] = useState<{ event: AdminEvent; isMock: boolean } | null>(null);
   const [selectedActive, setSelectedActive] = useState<AdminEvent | null>(null);
   const [showSources, setShowSources] = useState(false);
+  const [zincSyncing, setZincSyncing] = useState(false);
+  const [zincMsg, setZincMsg] = useState("");
 
   const loadEvents = async () => {
     setLoading(true);
@@ -1283,19 +1286,15 @@ export default function AdminEventsPage() {
     [events]
   );
 
-  // Fetch Devpost once when DB has no pending events
+  // Always fetch Devpost once on mount — show alongside DB pending events
   useEffect(() => {
-    if (loading) return;
-    if (pendingEvents.length > 0) return;
-    if (devpostFetchedRef.current) return; // only fetch once per page load
+    if (devpostFetchedRef.current) return;
     devpostFetchedRef.current = true;
-    void Promise.resolve().then(() => {
-      setDevpostLoading(true);
-      fetchDevpostEvents()
-        .then(setDevpostEvents)
-        .finally(() => setDevpostLoading(false));
-    });
-  }, [loading, pendingEvents.length]);
+    setDevpostLoading(true);
+    fetchDevpostEvents()
+      .then(setDevpostEvents)
+      .finally(() => setDevpostLoading(false));
+  }, []);
 
   const activeEvents = useMemo(
     () => events.filter((e) => e.approval_status === "approved"),
@@ -1328,7 +1327,7 @@ export default function AdminEventsPage() {
     [activeEvents, term]
   );
 
-  // When an event is approved it moves to active tab
+  // When a DB event is approved it moves to active tab
   const handleApproved = (id: string) => {
     setEvents((prev) =>
       prev.map((e) => (e.id === id ? { ...e, approval_status: "approved" } : e))
@@ -1336,15 +1335,30 @@ export default function AdminEventsPage() {
     setPageTab("active");
   };
 
-  const useDevpost = !loading && pendingEvents.length === 0;
-  // Filter out Devpost events that have already been imported to the DB (matched by source_url)
+  // Filter out Devpost events already imported to DB (matched by unique source_url)
   const importedUrls = useMemo(
     () => new Set(events.map((e) => e.source_url).filter(Boolean)),
     [events]
   );
-  const displayPending = useDevpost
-    ? devpostEvents.filter((de) => !de.source_url || !importedUrls.has(de.source_url))
-    : filteredPending;
+  const freshDevpostEvents = useMemo(
+    () => devpostEvents.filter((de) => !de.source_url || !importedUrls.has(de.source_url)),
+    [devpostEvents, importedUrls]
+  );
+  const filteredDevpost = useMemo(
+    () =>
+      freshDevpostEvents.filter(
+        (e) =>
+          !term ||
+          e.title?.toLowerCase().includes(term) ||
+          e.category?.toLowerCase().includes(term) ||
+          e.location?.toLowerCase().includes(term)
+      ),
+    [freshDevpostEvents, term]
+  );
+
+  // Merge: DB pending events first, then fresh Devpost/mock events
+  const displayPending = [...filteredPending, ...filteredDevpost];
+  const pendingCount = pendingEvents.length + freshDevpostEvents.length;
 
   return (
     <div className="min-h-screen px-6 py-8 lg:px-10">
@@ -1356,17 +1370,63 @@ export default function AdminEventsPage() {
             Review and approve events, or monitor live events and their participants.
           </p>
         </div>
-        <button
-          onClick={() => setShowSources(true)}
-          className="flex flex-shrink-0 items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 shadow-sm transition hover:border-[#1e3a8a] hover:text-[#1e3a8a]"
-        >
-          <svg width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-            <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
-            <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
-          </svg>
-          Manage Sources
-        </button>
+        <div className="flex flex-shrink-0 items-center gap-2">
+          {/* Sync Zinc button */}
+          <button
+            onClick={async () => {
+              setZincSyncing(true);
+              setZincMsg("");
+              try {
+                const res = await fetch("/api/zinc-scraper");
+                const json = await res.json();
+                setZincMsg(json.message ?? json.error ?? "Done");
+                if (res.ok && json.inserted > 0) {
+                  await loadEvents(); // refresh DB events so new zinc events appear
+                }
+              } catch {
+                setZincMsg("Failed to contact scraper.");
+              }
+              setZincSyncing(false);
+            }}
+            disabled={zincSyncing}
+            className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 shadow-sm transition hover:border-emerald-500 hover:text-emerald-700 disabled:opacity-60"
+          >
+            {zincSyncing ? (
+              <svg className="animate-spin" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M21 12a9 9 0 1 1-6.219-8.56" />
+              </svg>
+            ) : (
+              <svg width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                <path d="M1 4v6h6" /><path d="M23 20v-6h-6" />
+                <path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10M23 14l-4.64 4.36A9 9 0 0 1 3.51 15" />
+              </svg>
+            )}
+            {zincSyncing ? "Syncing…" : "Sync Zinc"}
+          </button>
+
+          <button
+            onClick={() => setShowSources(true)}
+            className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 shadow-sm transition hover:border-[#1e3a8a] hover:text-[#1e3a8a]"
+          >
+            <svg width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+              <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
+              <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
+            </svg>
+            Manage Sources
+          </button>
+        </div>
       </div>
+
+      {/* Zinc sync status message */}
+      {zincMsg && (
+        <div className={`mb-4 rounded-xl border px-4 py-3 text-sm ${
+          zincMsg.toLowerCase().includes("error") || zincMsg.toLowerCase().includes("unauthorized") || zincMsg.toLowerCase().includes("not set")
+            ? "border-red-200 bg-red-50 text-red-600"
+            : "border-emerald-200 bg-emerald-50 text-emerald-700"
+        }`}>
+          {zincMsg}
+        </div>
+      )}
 
       {error && (
         <div className="mb-6 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-600">
@@ -1381,7 +1441,7 @@ export default function AdminEventsPage() {
           onClick={() => setPageTab("pending")}
           dot="bg-amber-400"
           label="Pending Review"
-          count={pendingEvents.length}
+          count={pendingCount}
         />
         <TabBtn
           active={pageTab === "active"}
@@ -1423,14 +1483,17 @@ export default function AdminEventsPage() {
             />
           ) : (
             <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-              {displayPending.map((event) => (
-                <PendingCard
-                  key={event.id}
-                  event={event}
-                  isMock={useDevpost}
-                  onClick={() => setSelectedPending({ event, isMock: useDevpost })}
-                />
-              ))}
+              {displayPending.map((event) => {
+                const isMock = event.id.startsWith("__");
+                return (
+                  <PendingCard
+                    key={event.id}
+                    event={event}
+                    isMock={isMock}
+                    onClick={() => setSelectedPending({ event, isMock })}
+                  />
+                );
+              })}
             </div>
           )}
         </>
