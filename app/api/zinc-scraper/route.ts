@@ -63,11 +63,51 @@ function parseZincXML(xml: string): ZincEvent[] {
   return events;
 }
 
-// ─── Fetch one page from Zinc ─────────────────────────────────────────────────
-async function fetchZincPage(page: number): Promise<ZincEvent[]> {
+const UA =
+  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36";
+
+// ─── Step 1: establish a session by loading the events page ──────────────────
+async function getZincSession(): Promise<string> {
+  try {
+    const controller = new AbortController();
+    const t = setTimeout(() => controller.abort(), 10000);
+    const res = await fetch("https://zinc.jo/en/Home/Events", {
+      method: "GET",
+      headers: {
+        "User-Agent": UA,
+        Accept:
+          "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        "Accept-Language": "en-US,en;q=0.5",
+      },
+      signal: controller.signal,
+    });
+    clearTimeout(t);
+
+    // Collect all Set-Cookie headers into a single Cookie string
+    const raw = res.headers.get("set-cookie") ?? "";
+    if (!raw) return "";
+
+    // Parse multiple cookies (they may be comma-separated or in a single header)
+    const cookies = raw
+      .split(/,(?=[^ ])/g) // split on commas not followed by a space (cookie boundary)
+      .map((c) => c.split(";")[0].trim()) // take only name=value part
+      .filter(Boolean)
+      .join("; ");
+
+    return cookies;
+  } catch {
+    return "";
+  }
+}
+
+// ─── Step 2: fetch one page of events using the session ──────────────────────
+async function fetchZincPage(
+  page: number,
+  cookie: string
+): Promise<ZincEvent[]> {
   const body = new URLSearchParams({
     PageNumber: String(page),
-    PageSize: "30",
+    PageSize: "20",
     FromDate: "",
     ToDate: "",
     EventTitle: "",
@@ -75,7 +115,7 @@ async function fetchZincPage(page: number): Promise<ZincEvent[]> {
   });
 
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 8000); // 8s timeout
+  const t = setTimeout(() => controller.abort(), 10000);
 
   try {
     const res = await fetch("https://zinc.jo/en/Events/Search_EventsFilters", {
@@ -84,25 +124,26 @@ async function fetchZincPage(page: number): Promise<ZincEvent[]> {
         "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
         "X-Requested-With": "XMLHttpRequest",
         Referer: "https://zinc.jo/en/Home/Events",
-        "User-Agent":
-          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120 Safari/537.36",
+        "User-Agent": UA,
+        Accept: "*/*",
+        "Accept-Language": "en-US,en;q=0.5",
+        ...(cookie ? { Cookie: cookie } : {}),
       },
       body: body.toString(),
       signal: controller.signal,
     });
-    clearTimeout(timeout);
+    clearTimeout(t);
     if (!res.ok) return [];
     const xml = await res.text();
     return parseZincXML(xml);
   } catch {
-    clearTimeout(timeout);
+    clearTimeout(t);
     return [];
   }
 }
 
 // ─── Main handler ─────────────────────────────────────────────────────────────
 export async function GET() {
-  // Wrap everything in try-catch so we ALWAYS return JSON
   try {
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
     const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -113,14 +154,14 @@ export async function GET() {
         { status: 500 }
       );
     }
-
     if (!serviceKey) {
       return NextResponse.json(
         {
           error:
             "SUPABASE_SERVICE_ROLE_KEY is not set. " +
             "Go to Supabase → Settings → API → copy the service_role secret key, " +
-            "then add it to Vercel → Project Settings → Environment Variables.",
+            "then add it to Vercel → Project Settings → Environment Variables " +
+            "(or .env.local for local testing).",
         },
         { status: 500 }
       );
@@ -130,12 +171,15 @@ export async function GET() {
       auth: { persistSession: false },
     });
 
-    // ── Paginate through Zinc events (max 5 pages = 150 events) ──────────────
+    // ── Establish zinc.jo session first ──────────────────────────────────────
+    const sessionCookie = await getZincSession();
+
+    // ── Paginate through events (max 5 pages × 20 = 100 events) ─────────────
     const allZincEvents: ZincEvent[] = [];
     let totalCount = Infinity;
 
     for (let page = 1; page <= 5 && allZincEvents.length < totalCount; page++) {
-      const pageEvents = await fetchZincPage(page);
+      const pageEvents = await fetchZincPage(page, sessionCookie);
       if (pageEvents.length === 0) break;
       if (page === 1 && pageEvents[0]?.totalCount) {
         totalCount = pageEvents[0].totalCount;
@@ -146,7 +190,8 @@ export async function GET() {
     if (allZincEvents.length === 0) {
       return NextResponse.json({
         message:
-          "Could not fetch events from zinc.jo — the site may be temporarily unavailable.",
+          "Could not fetch events from zinc.jo — the site may require login or is blocking server requests. " +
+          `Session cookie obtained: ${sessionCookie ? "yes" : "no"}.`,
         total_scraped: 0,
         it_filtered: 0,
         inserted: 0,
@@ -167,7 +212,7 @@ export async function GET() {
       });
     }
 
-    // ── Deduplicate: skip events already in DB ────────────────────────────────
+    // ── Deduplicate ───────────────────────────────────────────────────────────
     const sourceUrls = itEvents.map((e) => `https://zinc.jo/event/${e.id}`);
     const { data: existing } = await supabase
       .from("events")
@@ -218,9 +263,12 @@ export async function GET() {
       inserted: toInsert.length,
     });
   } catch (err) {
-    // Safety net — always return JSON even on unexpected crash
     return NextResponse.json(
-      { error: `Unexpected error: ${err instanceof Error ? err.message : String(err)}` },
+      {
+        error: `Unexpected error: ${
+          err instanceof Error ? err.message : String(err)
+        }`,
+      },
       { status: 500 }
     );
   }
