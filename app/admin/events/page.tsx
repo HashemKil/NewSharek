@@ -75,7 +75,7 @@ async function fetchDevpostEvents(): Promise<AdminEvent[]> {
       approval_status: "pending",
       created_at: new Date().toISOString(),
       // Use the real hackathon URL so each event has a unique source_url
-      source_url: (h.url as string) ?? `https://devpost.com/hackathons/${h.id}` ?? null,
+      source_url: (h.url as string | undefined) ?? `https://devpost.com/hackathons/${String(h.id)}`,
       is_club_members_only: false,
     })),
     {
