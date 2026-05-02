@@ -1377,11 +1377,91 @@ export default function AdminEventsPage() {
               setZincSyncing(true);
               setZincMsg("");
               try {
-                const res = await fetch("/api/zinc-scraper");
+                // ── Browser-side scraping (avoids server geo-restrictions) ──
+                // The browser is in Jordan so zinc.jo is reachable.
+                // We use corsproxy.io to allow cross-origin POST from the browser.
+                const IT_KW = [
+                  "tech","technology","software","hardware","ai","artificial intelligence",
+                  "machine learning","ml","data","cyber","security","programming","coding",
+                  "developer","web","mobile","app","digital","cloud","devops","automation",
+                  "blockchain","robotics","iot","computer","information technology"," it ",
+                  "startup","innovation","hackathon","bootcamp","workshop","seminar",
+                  "conference","javascript","python","react","node","api","ui","ux",
+                  "design","network","stem","engineering","training",
+                ];
+                const isIT = (title: string, desc: string) => {
+                  const t = `${title} ${desc}`.toLowerCase();
+                  return IT_KW.some((k) => t.includes(k));
+                };
+                const getTag = (block: string, tag: string) => {
+                  const m = block.match(new RegExp(`<${tag}>([\\s\\S]*?)<\\/${tag}>`));
+                  return m ? m[1].replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, "$1").trim() : "";
+                };
+
+                const PROXY = "https://corsproxy.io/?";
+                const ZINC_URL = "https://zinc.jo/en/Events/Search_EventsFilters";
+                const allEvents: { title: string; description: string; event_date: string | null; location: string; source_url: string }[] = [];
+
+                for (let page = 1; page <= 5; page++) {
+                  const body = new URLSearchParams({
+                    PageNumber: String(page), PageSize: "20",
+                    FromDate: "", ToDate: "", EventTitle: "", InsideZINC: "",
+                  });
+                  let xml = "";
+                  try {
+                    const r = await fetch(PROXY + encodeURIComponent(ZINC_URL), {
+                      method: "POST",
+                      headers: {
+                        "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
+                        "X-Requested-With": "XMLHttpRequest",
+                      },
+                      body: body.toString(),
+                    });
+                    if (!r.ok) break;
+                    xml = await r.text();
+                  } catch { break; }
+
+                  const pageEvents: typeof allEvents = [];
+                  for (const match of xml.matchAll(/<Events>([\s\S]*?)<\/Events>/g)) {
+                    const b = match[1];
+                    const id = getTag(b, "ID");
+                    if (!id) continue;
+                    const title = getTag(b, "EventTitle") || "Untitled";
+                    const description = getTag(b, "Description") || getTag(b, "ShortDescription");
+                    if (!isIT(title, description)) continue;
+                    pageEvents.push({
+                      title,
+                      description,
+                      event_date: getTag(b, "EventEndDate") || getTag(b, "EventStartDate") || null,
+                      location: getTag(b, "MeetingRoomEnglishName") || getTag(b, "MeetingRoomArabichName") || "Zinc Hub, Amman",
+                      source_url: `https://zinc.jo/event/${id}`,
+                    });
+                  }
+                  if (pageEvents.length === 0 && page === 1) {
+                    setZincMsg("Could not reach zinc.jo — the CORS proxy may be unavailable. Try again in a moment.");
+                    setZincSyncing(false);
+                    return;
+                  }
+                  allEvents.push(...pageEvents);
+                  if (pageEvents.length < 20) break; // last page
+                }
+
+                if (allEvents.length === 0) {
+                  setZincMsg("No IT-related events found on Zinc this week.");
+                  setZincSyncing(false);
+                  return;
+                }
+
+                // Save to DB via server endpoint (uses service role key)
+                const res = await fetch("/api/zinc-save", {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify(allEvents),
+                });
                 const json = await res.json();
                 setZincMsg(json.message ?? json.error ?? "Done");
                 if (res.ok && json.inserted > 0) {
-                  await loadEvents(); // refresh DB events so new zinc events appear
+                  await loadEvents();
                 }
               } catch {
                 setZincMsg("Failed to contact scraper.");
