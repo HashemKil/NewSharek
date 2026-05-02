@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { getClubAdminContext } from "../../lib/clubAdmin";
 import { supabase } from "../../lib/supabase";
 import ClubAdminSidebar from "../../components/ClubAdminSidebar";
 
@@ -12,6 +13,7 @@ export default function ClubAdminLayout({
 }) {
   const router = useRouter();
   const [adminName, setAdminName] = useState("");
+  const [clubName, setClubName] = useState("");
   const [checking, setChecking] = useState(true);
   const [authorized, setAuthorized] = useState(false);
 
@@ -27,18 +29,18 @@ export default function ClubAdminLayout({
         return;
       }
 
-      const { data: profile, error: profileError } = await supabase
+      const { data: profile } = await supabase
         .from("profiles")
         .select("full_name, is_club_admin")
         .eq("id", user.id)
-        .single();
+        .maybeSingle();
+      const context = await getClubAdminContext();
+      const resolvedClub = context.managedClub;
+      const finalClubName =
+        resolvedClub?.name?.trim() || resolvedClub?.title?.trim() || "";
 
-      if (profileError || !profile?.is_club_admin) {
-        router.replace("/home");
-        return;
-      }
-
-      setAdminName(profile.full_name || "Club Admin");
+      setAdminName(profile?.full_name || "Club Admin");
+      setClubName(finalClubName);
       setAuthorized(true);
       setChecking(false);
     };
@@ -61,7 +63,7 @@ export default function ClubAdminLayout({
 
   return (
     <div className="flex min-h-screen bg-slate-50">
-      <ClubAdminSidebar adminName={adminName} />
+      <ClubAdminSidebar adminName={adminName} clubName={clubName} />
       <main className="flex-1 overflow-y-auto">{children}</main>
     </div>
   );

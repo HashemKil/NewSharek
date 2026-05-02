@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useEffect, useState } from "react";
 import { getClubAdminContext, type ManagedClub } from "../../../lib/clubAdmin";
 import { supabase } from "../../../lib/supabase";
@@ -120,21 +119,9 @@ export default function ClubAdminMembersPage() {
         </div>
       )}
 
-      <div className="mb-6 grid gap-4 md:grid-cols-3">
-        <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-          <p className="text-sm font-medium text-slate-500">Total Members</p>
-          <p className="mt-2 text-3xl font-bold text-slate-900">{members.length}</p>
-        </div>
-        <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-          <p className="text-sm font-medium text-slate-500">Admin Access</p>
-          <p className="mt-2 text-lg font-semibold text-slate-900">Club-only roster control</p>
-        </div>
-        <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-          <p className="text-sm font-medium text-slate-500">Helpful Link</p>
-          <Link href="/clubs" className="mt-2 inline-flex text-sm font-semibold text-[#1e3a8a] hover:underline">
-            Open clubs page
-          </Link>
-        </div>
+      <div className="mb-6 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+        <p className="text-sm font-medium text-slate-500">Total Members</p>
+        <p className="mt-2 text-3xl font-bold text-slate-900">{members.length}</p>
       </div>
 
       <div className="rounded-2xl border border-slate-200 bg-white shadow-sm">
@@ -162,8 +149,6 @@ export default function ClubAdminMembersPage() {
                 <tr className="border-b border-slate-100 text-left text-xs font-semibold uppercase tracking-wide text-slate-400">
                   <th className="px-6 py-3">Member</th>
                   <th className="px-6 py-3">Student ID</th>
-                  <th className="px-6 py-3">Major</th>
-                  <th className="px-6 py-3">Year</th>
                   <th className="px-6 py-3">Joined</th>
                   <th className="px-6 py-3">Action</th>
                 </tr>
@@ -189,10 +174,6 @@ export default function ClubAdminMembersPage() {
                       </td>
                       <td className="px-6 py-4 font-mono text-xs text-slate-500">
                         {member.student_id || "-"}
-                      </td>
-                      <td className="px-6 py-4 text-slate-500">{member.major || "-"}</td>
-                      <td className="px-6 py-4 text-slate-500">
-                        {member.academic_year || "-"}
                       </td>
                       <td className="px-6 py-4 text-slate-500">
                         {member.created_at

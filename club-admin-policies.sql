@@ -21,11 +21,11 @@ using (
   exists (
     select 1
     from public.profiles
-    join public.club_members as manager_membership
-      on manager_membership.user_id = profiles.id
+    join public.clubs
+      on clubs.club_admin_id = profiles.id
     where profiles.id = auth.uid()
       and profiles.is_club_admin = true
-      and manager_membership.club_id = club_members.club_id
+      and clubs.id = club_members.club_id
   )
 );
 
@@ -53,11 +53,11 @@ using (
   and exists (
     select 1
     from public.profiles
-    join public.club_members as manager_membership
-      on manager_membership.user_id = profiles.id
+    join public.clubs
+      on clubs.club_admin_id = profiles.id
     where profiles.id = auth.uid()
       and profiles.is_club_admin = true
-      and manager_membership.club_id = club_members.club_id
+      and clubs.id = club_members.club_id
   )
 );
 

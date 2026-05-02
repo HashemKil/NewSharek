@@ -20,7 +20,22 @@ type Profile = {
   interests?: string[] | null;
   avatar_url?: string | null;
   portal_verified?: boolean | null;
+  is_club_admin?: boolean | null;
 };
+
+type ManagedClub = {
+  id: string;
+  name?: string | null;
+  title?: string | null;
+};
+
+type ClubMembershipRow = {
+  club_id: string;
+  clubs?: ManagedClub | ManagedClub[] | null;
+};
+
+const getClubName = (club: ManagedClub) =>
+  club.name?.trim() || club.title?.trim() || "Untitled club";
 
 export default function MemberProfilePage() {
   const params = useParams();
@@ -29,6 +44,7 @@ export default function MemberProfilePage() {
 
   const [profile, setProfile] = useState<Profile | null>(null);
   const [avatarUrl, setAvatarUrl] = useState("");
+  const [managedClub, setManagedClub] = useState<ManagedClub | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -64,6 +80,39 @@ export default function MemberProfilePage() {
         const loadedProfile = data as Profile;
         setProfile(loadedProfile);
         setAvatarUrl(loadedProfile.avatar_url || "");
+        const { data: managedClubData, error: managedClubError } = await supabase
+          .from("clubs")
+          .select("id, name, title")
+          .eq("club_admin_id", loadedProfile.id)
+          .limit(1)
+          .maybeSingle();
+
+        if (managedClubError) {
+          console.warn("Could not load managed club:", managedClubError.message);
+          setManagedClub(null);
+        } else {
+          let nextManagedClub = (managedClubData as ManagedClub | null) || null;
+
+          if (!nextManagedClub) {
+            const { data: membershipData, error: membershipError } = await supabase
+              .from("club_members")
+              .select("club_id, clubs(id, name, title)")
+              .eq("user_id", loadedProfile.id)
+              .limit(1);
+
+            if (membershipError) {
+              console.warn("Could not load fallback club admin membership:", membershipError.message);
+            } else {
+              const membership = ((membershipData || []) as ClubMembershipRow[])[0];
+              const membershipClub = Array.isArray(membership?.clubs)
+                ? membership.clubs[0]
+                : membership?.clubs;
+              nextManagedClub = membershipClub || null;
+            }
+          }
+
+          setManagedClub(nextManagedClub);
+        }
         setLoading(false);
 
         if (
@@ -154,7 +203,17 @@ export default function MemberProfilePage() {
                         Verified
                       </span>
                     )}
+                    {managedClub && (
+                      <span className="rounded-full bg-[#ede9fe] px-2 py-1 text-xs font-medium text-[#6d28d9]">
+                        Admin of {getClubName(managedClub)}
+                      </span>
+                    )}
                   </div>
+                  {managedClub && (
+                    <p className="mt-2 text-sm font-medium text-[#1e3a8a]">
+                      Club Admin of {getClubName(managedClub)}
+                    </p>
+                  )}
                   <p className="mt-1 text-base text-gray-700">
                     {profile.major || "Major not specified"}
                   </p>
@@ -206,6 +265,31 @@ export default function MemberProfilePage() {
                   </p>
                 </div>
               </div>
+
+              {managedClub && (
+                <div className="mt-8 rounded-2xl border border-[#d9e3ff] bg-[#f8fbff] p-5">
+                  <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                    <div>
+                      <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#1e3a8a]">
+                        Leadership
+                      </p>
+                      <h2 className="mt-2 text-lg font-bold text-slate-900">
+                        Club Admin of {getClubName(managedClub)}
+                      </h2>
+                      <p className="mt-1 text-sm text-slate-600">
+                        This student is the assigned admin for this club.
+                      </p>
+                    </div>
+
+                    <Link
+                      href={`/clubs/${managedClub.id}`}
+                      className="inline-flex shrink-0 items-center justify-center rounded-lg border border-[#1e3a8a] px-4 py-2 text-sm font-semibold text-[#1e3a8a] transition hover:bg-[#eef3ff]"
+                    >
+                      View club
+                    </Link>
+                  </div>
+                </div>
+              )}
 
               <div className="mt-8">
                 <h2 className="text-sm font-semibold text-gray-500">About</h2>

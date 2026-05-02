@@ -1290,10 +1290,23 @@ export default function AdminEventsPage() {
   useEffect(() => {
     if (devpostFetchedRef.current) return;
     devpostFetchedRef.current = true;
-    setDevpostLoading(true);
-    fetchDevpostEvents()
-      .then(setDevpostEvents)
-      .finally(() => setDevpostLoading(false));
+    let cancelled = false;
+
+    void Promise.resolve().then(() => {
+      if (cancelled) return;
+      setDevpostLoading(true);
+      fetchDevpostEvents()
+        .then((data) => {
+          if (!cancelled) setDevpostEvents(data);
+        })
+        .finally(() => {
+          if (!cancelled) setDevpostLoading(false);
+        });
+    });
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const activeEvents = useMemo(

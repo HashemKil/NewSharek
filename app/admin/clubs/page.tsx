@@ -13,6 +13,7 @@ type Club = {
   category: string | null;
   description: string | null;
   created_at: string | null;
+  club_admin_id: string | null;
   memberCount?: number;
 };
 
@@ -63,6 +64,11 @@ function ClubModal({
   const [saving, setSaving] = useState(false);
   const [saveMsg, setSaveMsg] = useState("");
   const [saveErr, setSaveErr] = useState("");
+  const [adminSaving, setAdminSaving] = useState(false);
+  const [selectedAdminUserId, setSelectedAdminUserId] = useState(
+    club.club_admin_id ?? ""
+  );
+  const [adminSearch, setAdminSearch] = useState("");
 
   // Members state
   const [members, setMembers] = useState<Member[]>([]);
@@ -72,7 +78,6 @@ function ClubModal({
 
   // Load members
   useEffect(() => {
-    if (tab !== "members") return;
     const load = async () => {
       setMembersLoading(true);
       setMembersErr("");
@@ -104,7 +109,7 @@ function ClubModal({
       setMembersLoading(false);
     };
     load();
-  }, [tab, club.id]);
+  }, [club.id]);
 
   const handleSave = async () => {
     setSaving(true); setSaveErr(""); setSaveMsg("");
@@ -126,6 +131,70 @@ function ClubModal({
     setSaving(false);
   };
 
+  const handleAssignClubAdmin = async () => {
+    setAdminSaving(true);
+    setSaveErr("");
+    setSaveMsg("");
+
+    const previousAdminUserId = club.club_admin_id;
+    const nextAdminUserId = selectedAdminUserId || null;
+
+    const { error: clubUpdateError } = await supabase
+      .from("clubs")
+      .update({ club_admin_id: nextAdminUserId })
+      .eq("id", club.id);
+
+    if (clubUpdateError) {
+      setSaveErr(clubUpdateError.message);
+      setAdminSaving(false);
+      return;
+    }
+
+    if (nextAdminUserId) {
+      await supabase
+        .from("profiles")
+        .update({ is_club_admin: true })
+        .eq("id", nextAdminUserId);
+    }
+
+    if (previousAdminUserId && previousAdminUserId !== nextAdminUserId) {
+      const { count } = await supabase
+        .from("clubs")
+        .select("id", { count: "exact", head: true })
+        .eq("club_admin_id", previousAdminUserId);
+
+      if ((count ?? 0) === 0) {
+        await supabase
+          .from("profiles")
+          .update({ is_club_admin: false })
+          .eq("id", previousAdminUserId);
+      }
+    }
+
+    setMembers((prev) =>
+      prev.map((member) => ({
+        ...member,
+        profiles: member.profiles
+          ? {
+              ...member.profiles,
+              is_club_admin:
+                member.user_id === nextAdminUserId
+                  ? true
+                  : member.user_id === previousAdminUserId &&
+                    previousAdminUserId !== nextAdminUserId
+                  ? false
+                  : member.profiles.is_club_admin,
+            }
+          : null,
+      }))
+    );
+
+    onUpdated({ ...club, club_admin_id: nextAdminUserId });
+    setSaveMsg("Club admin updated successfully.");
+    setTimeout(() => setSaveMsg(""), 3000);
+    setAdminSaving(false);
+  };
+
   const handleRemoveMember = async (member: Member) => {
     const { error } = await supabase
       .from("club_members")
@@ -133,6 +202,10 @@ function ClubModal({
       .eq("id", member.id);
     if (!error) {
       setMembers((prev) => prev.filter((m) => m.id !== member.id));
+      if (member.user_id === club.club_admin_id) {
+        setSelectedAdminUserId("");
+        onUpdated({ ...club, club_admin_id: null });
+      }
     }
   };
 
@@ -153,6 +226,21 @@ function ClubModal({
       );
     }
   };
+
+  const assignedAdmin = members.find((member) => member.user_id === club.club_admin_id);
+  const filteredAdminMembers = members.filter((member) => {
+    const query = adminSearch.trim().toLowerCase();
+    if (!query) return true;
+
+    return [
+      member.profiles?.student_id,
+      member.profiles?.full_name,
+      member.profiles?.email,
+      member.user_id,
+    ]
+      .filter(Boolean)
+      .some((value) => value?.toLowerCase().includes(query));
+  });
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4" onClick={onClose}>
@@ -220,10 +308,78 @@ function ClubModal({
                 <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-slate-400">Description</label>
                 <textarea rows={4} value={editDesc} onChange={(e) => setEditDesc(e.target.value)} placeholder="Club description…" className={`${inputCls} resize-none`} />
               </div>
+              <div>
+                <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-slate-400">Assigned Club Admin</label>
+                <input
+                  type="text"
+                  value={adminSearch}
+                  onChange={(e) => setAdminSearch(e.target.value)}
+                  placeholder="Search by ID, name, or email..."
+                  className={`${inputCls} mb-3`}
+                />
+                {adminSearch.trim() && (
+                  <div className="mb-3 max-h-44 overflow-y-auto rounded-xl border border-slate-200 bg-white">
+                    {filteredAdminMembers.length === 0 ? (
+                      <p className="px-4 py-3 text-sm text-slate-400">No matching members found.</p>
+                    ) : (
+                      filteredAdminMembers.map((member) => {
+                        const label = `${member.profiles?.full_name || member.profiles?.email || member.user_id}${
+                          member.profiles?.student_id ? ` (${member.profiles.student_id})` : ""
+                        }`;
+                        const active = selectedAdminUserId === member.user_id;
+
+                        return (
+                          <button
+                            key={`search-${member.id}`}
+                            type="button"
+                            onClick={() => {
+                              setSelectedAdminUserId(member.user_id);
+                              setAdminSearch(label);
+                            }}
+                            className={`flex w-full items-center justify-between px-4 py-3 text-left text-sm transition ${
+                              active
+                                ? "bg-[#eef3ff] text-[#1e3a8a]"
+                                : "text-slate-700 hover:bg-slate-50"
+                            }`}
+                          >
+                            <span>{label}</span>
+                            {active && <span className="text-xs font-semibold">Selected</span>}
+                          </button>
+                        );
+                      })
+                    )}
+                  </div>
+                )}
+                <select
+                  value={selectedAdminUserId}
+                  onChange={(e) => setSelectedAdminUserId(e.target.value)}
+                  className={inputCls}
+                >
+                  <option value="">No club admin assigned</option>
+                  {filteredAdminMembers.map((member) => (
+                    <option key={member.id} value={member.user_id}>
+                      {member.profiles?.full_name || member.profiles?.email || member.user_id}
+                      {member.profiles?.student_id ? ` (${member.profiles.student_id})` : ""}
+                    </option>
+                  ))}
+                </select>
+                <p className="mt-2 text-xs text-slate-400">
+                  {assignedAdmin
+                    ? `Current club admin: ${assignedAdmin.profiles?.full_name || assignedAdmin.profiles?.email || "Assigned user"}${assignedAdmin.profiles?.student_id ? ` (${assignedAdmin.profiles.student_id})` : ""}`
+                    : "Search and choose one of the club members to manage this club."}
+                </p>
+              </div>
 
               <div className="flex items-center gap-3 border-t border-slate-100 pt-2">
                 <button onClick={handleSave} disabled={saving} className="rounded-xl bg-[#1e3a8a] px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-[#1e40af] disabled:opacity-60">
                   {saving ? "Saving…" : "Save changes"}
+                </button>
+                <button
+                  onClick={handleAssignClubAdmin}
+                  disabled={adminSaving || membersLoading}
+                  className="rounded-xl border border-purple-200 bg-purple-50 px-5 py-2.5 text-sm font-semibold text-purple-700 transition hover:bg-purple-100 disabled:opacity-60"
+                >
+                  {adminSaving ? "Assigningâ€¦" : "Save Club Admin"}
                 </button>
                 <p className="text-xs text-slate-400">Created {fmt(club.created_at)}</p>
               </div>
@@ -264,6 +420,7 @@ function ClubModal({
                     <tbody>
                       {members.map((m) => {
                         const isAdmin = m.profiles?.is_club_admin ?? false;
+                        const isAssignedClubAdmin = club.club_admin_id === m.user_id;
                         return (
                           <tr key={m.id} className="border-b border-slate-50 last:border-0 hover:bg-slate-50">
                             <td className="px-4 py-3">
@@ -272,11 +429,18 @@ function ClubModal({
                             </td>
                             <td className="px-4 py-3 font-mono text-xs text-slate-500">{m.profiles?.student_id ?? "—"}</td>
                             <td className="px-4 py-3">
-                              <span className={`rounded-full px-2.5 py-0.5 text-xs font-semibold ${
-                                isAdmin ? "bg-purple-100 text-purple-700" : "bg-slate-100 text-slate-600"
-                              }`}>
-                                {isAdmin ? "Club Admin" : "Member"}
-                              </span>
+                              <div className="flex flex-wrap gap-2">
+                                <span className={`rounded-full px-2.5 py-0.5 text-xs font-semibold ${
+                                  isAdmin ? "bg-purple-100 text-purple-700" : "bg-slate-100 text-slate-600"
+                                }`}>
+                                  {isAdmin ? "Club Admin" : "Member"}
+                                </span>
+                                {isAssignedClubAdmin && (
+                                  <span className="rounded-full bg-[#eef3ff] px-2.5 py-0.5 text-xs font-semibold text-[#1e3a8a]">
+                                    Assigned
+                                  </span>
+                                )}
+                              </div>
                             </td>
                             <td className="px-4 py-3 text-xs text-slate-400">{fmt(m.created_at)}</td>
                             <td className="px-4 py-3">
@@ -379,7 +543,7 @@ export default function AdminClubsPage() {
       // Fetch clubs
       const { data: clubRows, error: clubErr } = await supabase
         .from("clubs")
-        .select("id, name, category, description, created_at")
+        .select("id, name, category, description, created_at, club_admin_id")
         .order("created_at", { ascending: false });
 
       if (clubErr) { setError(clubErr.message); setLoading(false); return; }

@@ -26,6 +26,16 @@ type ClubRow = {
   email?: string | null;
   location?: string | null;
   president?: string | null;
+  club_admin_id?: string | null;
+};
+
+type ClubAdminProfile = {
+  id: string;
+  full_name?: string | null;
+  major?: string | null;
+  student_id?: string | null;
+  avatar_url?: string | null;
+  portal_verified?: boolean | null;
 };
 
 type EventRow = {
@@ -95,6 +105,7 @@ export default function ClubDetailsPage() {
   const clubId = params.id;
 
   const [club, setClub] = useState<ClubRow | null>(null);
+  const [clubAdmin, setClubAdmin] = useState<ClubAdminProfile | null>(null);
   const [events, setEvents] = useState<EventRow[]>([]);
   const [userId, setUserId] = useState("");
   const [isMember, setIsMember] = useState(false);
@@ -194,7 +205,26 @@ export default function ClubDetailsPage() {
           return;
         }
 
-        setClub(clubResult.data as ClubRow);
+        const clubData = clubResult.data as ClubRow;
+        setClub(clubData);
+
+        if (clubData.club_admin_id) {
+          const { data: adminData, error: adminError } = await supabase
+            .from("profiles")
+            .select("id, full_name, major, student_id, avatar_url, portal_verified")
+            .eq("id", clubData.club_admin_id)
+            .single();
+
+          if (adminError) {
+            console.warn("Could not load club admin:", adminError.message);
+            setClubAdmin(null);
+          } else {
+            setClubAdmin(adminData as ClubAdminProfile);
+          }
+        } else {
+          setClubAdmin(null);
+        }
+
         setEvents(((eventsData || []) as EventRow[]).filter(Boolean));
 
         if (membershipResult.error) {
@@ -415,6 +445,64 @@ export default function ClubDetailsPage() {
           <p className="mt-6 max-w-4xl text-sm leading-6 text-slate-600">
             {club.description || "No description added yet."}
           </p>
+        </section>
+
+        <section className="mt-6 rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm">
+          <div>
+            <h2 className="text-xl font-bold text-slate-950">Club admin</h2>
+            <p className="mt-1 text-sm text-slate-500">
+              Meet the student leading {clubName}.
+            </p>
+          </div>
+
+          {clubAdmin ? (
+            <Link
+              href={`/profile/${clubAdmin.id}`}
+              className="mt-5 flex items-center gap-4 rounded-2xl border border-slate-200 p-4 transition hover:border-[#1e3a8a]/30 hover:bg-slate-50"
+            >
+              {clubAdmin.avatar_url ? (
+                <div
+                  aria-label={`${clubAdmin.full_name || "Club admin"} avatar`}
+                  className="h-16 w-16 shrink-0 rounded-full border border-slate-200 bg-cover bg-center"
+                  style={{ backgroundImage: `url(${clubAdmin.avatar_url})` }}
+                />
+              ) : (
+                <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-full border border-[#c7d5fb] bg-[#eef3ff] text-xl font-bold text-[#1e3a8a]">
+                  {(clubAdmin.full_name || "A").slice(0, 1).toUpperCase()}
+                </div>
+              )}
+
+              <div className="min-w-0 flex-1">
+                <div className="flex flex-wrap items-center gap-2">
+                  <h3 className="text-lg font-bold text-slate-950">
+                    {clubAdmin.full_name || "Club admin"}
+                  </h3>
+                  <span className="rounded-full bg-[#eef3ff] px-2.5 py-1 text-xs font-semibold text-[#1e3a8a]">
+                    Club Admin
+                  </span>
+                  {clubAdmin.portal_verified && (
+                    <span className="rounded-full bg-green-50 px-2.5 py-1 text-xs font-semibold text-green-700">
+                      Verified
+                    </span>
+                  )}
+                </div>
+                <p className="mt-1 text-sm text-slate-600">
+                  {clubAdmin.major || "Major not specified"}
+                </p>
+                <p className="mt-1 text-xs text-slate-500">
+                  Student ID: {clubAdmin.student_id || "Not specified"}
+                </p>
+              </div>
+
+              <span className="shrink-0 text-sm font-semibold text-[#1e3a8a]">
+                View profile
+              </span>
+            </Link>
+          ) : (
+            <div className="mt-5 rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-6 text-sm text-slate-500">
+              No club admin has been assigned yet.
+            </div>
+          )}
         </section>
 
         <section className="mt-6 rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm">

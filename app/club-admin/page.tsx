@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import { getClubAdminContext } from "../../lib/clubAdmin";
 import { supabase } from "../../lib/supabase";
 
 type Stats = {
@@ -93,23 +94,10 @@ export default function ClubAdminDashboard() {
           return;
         }
 
-        const membershipResult = await supabase
-          .from("club_members")
-          .select("club_id, clubs(id, name, title, category)")
-          .eq("user_id", user.id)
-          .limit(1)
-          .maybeSingle();
+        const context = await getClubAdminContext();
+        const managedClubData = context.managedClub;
 
-        const managedClubData =
-          membershipResult.data &&
-          typeof membershipResult.data === "object" &&
-          "clubs" in membershipResult.data
-            ? Array.isArray(membershipResult.data.clubs)
-              ? membershipResult.data.clubs[0]
-              : membershipResult.data.clubs
-            : null;
-
-        if (membershipResult.error || !managedClubData?.id) {
+        if (context.error || !managedClubData?.id) {
           setManagedClub(null);
           setStats({
             totalClubs: 0,
@@ -166,6 +154,11 @@ export default function ClubAdminDashboard() {
         <p className="mt-1 text-sm text-slate-500">
           Overview of your club, its members, and its events on Sharek.
         </p>
+        {!loading && managedClub && (
+          <p className="mt-3 inline-flex rounded-full bg-[#eef3ff] px-4 py-2 text-sm font-semibold text-[#1e3a8a]">
+            Assigned club: {managedClub.name?.trim() || managedClub.title?.trim() || "Your Club"}
+          </p>
+        )}
       </div>
 
       {!loading && managedClub && (
@@ -191,19 +184,7 @@ export default function ClubAdminDashboard() {
           ))}
         </div>
       ) : (
-        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-          <StatCard
-            label="Managed Clubs"
-            value={stats.totalClubs}
-            color="bg-blue-50"
-            icon={
-              <svg width="20" height="20" fill="none" stroke="#1e3a8a" strokeWidth="2" viewBox="0 0 24 24">
-                <path d="M12 5 5 9l7 4 7-4-7-4Z" />
-                <path d="M5 13l7 4 7-4" />
-                <path d="M5 17l7 4 7-4" />
-              </svg>
-            }
-          />
+        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
           <StatCard
             label="Club Events"
             value={stats.totalEvents}

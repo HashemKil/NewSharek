@@ -20,14 +20,22 @@ export default function AppNavbar() {
 
       if (!user) return;
 
-      const { data: profile } = await supabase
-        .from("profiles")
-        .select("is_admin, is_club_admin")
-        .eq("id", user.id)
-        .single();
+      const [{ data: profile }, { data: assignedClub }] = await Promise.all([
+        supabase
+          .from("profiles")
+          .select("is_admin, is_club_admin")
+          .eq("id", user.id)
+          .single(),
+        supabase
+          .from("clubs")
+          .select("id")
+          .eq("club_admin_id", user.id)
+          .limit(1)
+          .maybeSingle(),
+      ]);
 
       setIsAdmin(profile?.is_admin === true);
-      setIsClubAdmin(profile?.is_club_admin === true);
+      setIsClubAdmin(profile?.is_club_admin === true || Boolean(assignedClub?.id));
     };
 
     checkAdmin();

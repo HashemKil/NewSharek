@@ -78,6 +78,12 @@ type ClubMembership = {
   clubs?: Club | Club[] | null;
 };
 
+type ManagedClub = {
+  id: string;
+  name?: string | null;
+  title?: string | null;
+};
+
 const TEAM_MEMBER_LIMIT = 6;
 
 const yearOptions = [
@@ -137,6 +143,7 @@ export default function ProfilePage() {
   const [eventRefs, setEventRefs] = useState<EventRef[]>([]);
   const [eventRegistrations, setEventRegistrations] = useState<EventRegistrationRow[]>([]);
   const [joinedClubs, setJoinedClubs] = useState<Club[]>([]);
+  const [managedClub, setManagedClub] = useState<ManagedClub | null>(null);
   const [teamActionId, setTeamActionId] = useState("");
   const [addMemberInputs, setAddMemberInputs] = useState<Record<string, string>>({});
   const [editingTeamId, setEditingTeamId] = useState("");
@@ -274,7 +281,12 @@ export default function ProfilePage() {
   };
 
   const loadProfileActivity = async (userId: string) => {
-    const [eventRefsResult, eventRegistrationsResult, clubMembershipsResult] =
+    const [
+      eventRefsResult,
+      eventRegistrationsResult,
+      clubMembershipsResult,
+      managedClubResult,
+    ] =
       await Promise.all([
         supabase.from("events").select("id, title"),
         supabase
@@ -285,6 +297,12 @@ export default function ProfilePage() {
           .from("club_members")
           .select("club_id, clubs(id, name, title, category)")
           .eq("user_id", userId),
+        supabase
+          .from("clubs")
+          .select("id, name, title")
+          .eq("club_admin_id", userId)
+          .limit(1)
+          .maybeSingle(),
       ]);
 
     if (eventRefsResult.error) {
@@ -321,6 +339,13 @@ export default function ProfilePage() {
             .filter(Boolean) as Club[]
         )
       );
+    }
+
+    if (managedClubResult.error) {
+      console.warn("Could not load managed club:", managedClubResult.error.message);
+      setManagedClub(null);
+    } else {
+      setManagedClub((managedClubResult.data as ManagedClub | null) || null);
     }
   };
 
@@ -1064,6 +1089,9 @@ export default function ProfilePage() {
     return `${names.slice(0, 2).join(", ")} +${names.length - 2} more`;
   }, [joinedClubs]);
 
+  const effectiveManagedClub = managedClub || joinedClubs[0] || null;
+  const managedClubName = effectiveManagedClub ? getClubName(effectiveManagedClub) : "";
+
   const inputClass =
     "mt-2 w-full rounded-xl border border-gray-300 px-4 py-3 text-sm text-gray-900 placeholder:text-gray-400 bg-white outline-none focus:border-[#1e3a8a] focus:ring-2 focus:ring-[#1e3a8a]/10";
 
@@ -1165,12 +1193,22 @@ export default function ProfilePage() {
                       Admin
                     </span>
                   )}
-                  {profile?.is_club_admin && (
+                  {profile?.is_club_admin && !managedClubName && (
                     <span className="rounded-full bg-[#ede9fe] px-2 py-1 text-xs font-medium text-[#6d28d9]">
                       Club Admin
                     </span>
                   )}
+                  {managedClubName && (
+                    <span className="rounded-full bg-[#ede9fe] px-2 py-1 text-xs font-medium text-[#6d28d9]">
+                      Admin of {managedClubName}
+                    </span>
+                  )}
                 </div>
+                {managedClubName && (
+                  <p className="mt-3 text-sm font-medium text-[#1e3a8a]">
+                    Club Admin of {managedClubName}
+                  </p>
+                )}
                 <p className="mt-1 text-base text-gray-700">
                   {majorState || profile?.major || "Major not specified"}
                 </p>
@@ -1258,6 +1296,31 @@ export default function ProfilePage() {
                     {joinedClubNames}
                   </p>
                 </Link>
+              </div>
+            )}
+
+            {!editing && effectiveManagedClub && (
+              <div className="mt-8 rounded-2xl border border-[#d9e3ff] bg-[#f8fbff] p-5">
+                <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#1e3a8a]">
+                      Leadership
+                    </p>
+                    <h3 className="mt-2 text-lg font-bold text-slate-900">
+                      Club Admin of {managedClubName}
+                    </h3>
+                    <p className="mt-1 text-sm text-slate-600">
+                      Your profile shows that you manage this club.
+                    </p>
+                  </div>
+
+                  <Link
+                    href={`/clubs/${effectiveManagedClub.id}`}
+                    className="inline-flex shrink-0 items-center justify-center rounded-lg border border-[#1e3a8a] px-4 py-2 text-sm font-semibold text-[#1e3a8a] transition hover:bg-[#eef3ff]"
+                  >
+                    View club
+                  </Link>
+                </div>
               </div>
             )}
 
