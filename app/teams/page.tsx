@@ -35,8 +35,22 @@ type TeamMember = {
   profiles?: Profile | Profile[] | null;
 };
 
+type EventRow = {
+  id: string;
+  title: string | null;
+  event_date?: string | null;
+  end_date?: string | null;
+  registration_deadline?: string | null;
+  start_time?: string | null;
+  end_time?: string | null;
+  approval_status?: string | null;
+};
+
 type TeamWithMembers = Team & {
   members: TeamMember[];
+  linkedEvent: EventRow | null;
+  isEventRegisterable: boolean;
+  eventUnavailableReason: string | null;
 };
 
 const TEAM_MEMBER_LIMIT = 6;
@@ -46,6 +60,88 @@ const inputClass =
 
 const getMemberProfile = (member: TeamMember) =>
   Array.isArray(member.profiles) ? member.profiles[0] : member.profiles;
+
+const normalizeTitle = (value: string | null | undefined) =>
+  (value || "").trim().toLowerCase();
+
+const parseEventDateTime = (
+  date: string | null | undefined,
+  time: string | null | undefined,
+  fallback: "start" | "end"
+) => {
+  if (!date) return null;
+
+  const [year, month, day] = date.split("-").map(Number);
+  if (![year, month, day].every(Number.isFinite)) return null;
+
+  let hours = fallback === "end" ? 23 : 0;
+  let minutes = fallback === "end" ? 59 : 0;
+  let seconds = fallback === "end" ? 59 : 0;
+
+  if (time) {
+    const [rawHours, rawMinutes, rawSeconds] = time.split(":");
+    hours = Number(rawHours);
+    minutes = Number(rawMinutes ?? 0);
+    seconds = Number(rawSeconds ?? 0);
+  }
+
+  if (![hours, minutes, seconds].every(Number.isFinite)) return null;
+
+  const parsed = new Date(
+    year,
+    month - 1,
+    day,
+    hours,
+    minutes,
+    seconds,
+    fallback === "end" ? 999 : 0
+  );
+
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+};
+
+const hasDeadlinePassed = (deadline: string | null | undefined) => {
+  if (!deadline) return false;
+
+  if (/^\d{4}-\d{2}-\d{2}$/.test(deadline)) {
+    const [year, month, day] = deadline.split("-").map(Number);
+    const endOfDeadlineDay = new Date(year, month - 1, day, 23, 59, 59, 999);
+    return endOfDeadlineDay < new Date();
+  }
+
+  const parsed = new Date(deadline);
+  return !Number.isNaN(parsed.getTime()) && parsed < new Date();
+};
+
+const getEventUnavailableReason = (event: EventRow | null) => {
+  if (!event) return "Linked event is not available.";
+  if ((event.approval_status ?? "approved") !== "approved") {
+    return "Linked event is not approved.";
+  }
+  if (hasDeadlinePassed(event.registration_deadline)) {
+    return "Registration is closed.";
+  }
+
+  const startsAt = parseEventDateTime(event.event_date, event.start_time, "start");
+  const endsAt = parseEventDateTime(
+    event.end_date || event.event_date,
+    event.end_time,
+    "end"
+  );
+
+  if (startsAt && endsAt) {
+    const effectiveEndsAt = new Date(endsAt);
+    if (effectiveEndsAt < startsAt) {
+      effectiveEndsAt.setDate(effectiveEndsAt.getDate() + 1);
+    }
+
+    if (new Date() > effectiveEndsAt) {
+      return "Event has ended.";
+    }
+  }
+
+  return null;
+};
 
 export default function TeamsPage() {
   const router = useRouter();
@@ -114,26 +210,54 @@ export default function TeamsPage() {
         return;
       }
 
-      const { data: memberData, error: memberError } = await supabase
-        .from("team_members")
-        .select(
-          "id, team_id, user_id, status, profiles(id, full_name, email, student_id, major, academic_year)"
-        )
-        .in(
-          "team_id",
-          loadedTeams.map((team) => team.id)
-        );
+      const [memberResult, eventResult] = await Promise.all([
+        supabase
+          .from("team_members")
+          .select(
+            "id, team_id, user_id, status, profiles(id, full_name, email, student_id, major, academic_year)"
+          )
+          .in(
+            "team_id",
+            loadedTeams.map((team) => team.id)
+          ),
+        supabase
+          .from("events")
+          .select(
+            "id, title, event_date, end_date, registration_deadline, start_time, end_time, approval_status"
+          ),
+      ]);
+
+      const { data: memberData, error: memberError } = memberResult;
 
       if (memberError) {
         setError(memberError.message);
         return;
       }
 
+      if (eventResult.error) {
+        setError(eventResult.error.message);
+        return;
+      }
+
       const members = (memberData || []) as TeamMember[];
-      const teamsWithMembers = loadedTeams.map((team) => ({
-        ...team,
-        members: members.filter((member) => member.team_id === team.id),
-      }));
+      const eventsByTitle = new Map(
+        ((eventResult.data || []) as EventRow[]).map((event) => [
+          normalizeTitle(event.title),
+          event,
+        ])
+      );
+      const teamsWithMembers = loadedTeams.map((team) => {
+        const linkedEvent = eventsByTitle.get(normalizeTitle(team.event)) ?? null;
+        const eventUnavailableReason = getEventUnavailableReason(linkedEvent);
+
+        return {
+          ...team,
+          members: members.filter((member) => member.team_id === team.id),
+          linkedEvent,
+          isEventRegisterable: !eventUnavailableReason,
+          eventUnavailableReason,
+        };
+      });
 
       setTeams(teamsWithMembers);
     } catch (err) {
@@ -188,6 +312,7 @@ export default function TeamsPage() {
       return (
         team.owner_id !== profile.id &&
         team.is_open_to_members !== false &&
+        team.isEventRegisterable &&
         approvedCount < TEAM_MEMBER_LIMIT &&
         !activeEventTitles.has(eventKey)
       );
@@ -479,6 +604,11 @@ export default function TeamsPage() {
     setSuccess("");
 
     try {
+      if (!team.isEventRegisterable) {
+        setError(team.eventUnavailableReason || "This event is not open for registration.");
+        return;
+      }
+
       const canJoin = await ensureStudentsCanJoinEvent(team, [profile]);
       if (!canJoin) return;
 
@@ -665,6 +795,11 @@ export default function TeamsPage() {
             {team.is_open_to_members === false && (
               <span className="rounded-full bg-red-50 px-3 py-1 text-xs font-semibold text-red-600">
                 Closed
+              </span>
+            )}
+            {!team.isEventRegisterable && (
+              <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">
+                Event closed
               </span>
             )}
           </div>
@@ -887,7 +1022,7 @@ export default function TeamsPage() {
     return (
       <main className="min-h-screen bg-[#f3f5f9]">
         <AppNavbar />
-        <section className="mx-auto max-w-7xl px-6 py-8">
+        <section className="mx-auto max-w-[1800px] px-4 py-6 sm:px-6 lg:px-8 xl:px-10 2xl:px-12">
           <div className="rounded-2xl border border-gray-200 bg-white p-6 text-sm text-gray-600 shadow-sm">
             Loading teams...
           </div>
@@ -900,7 +1035,7 @@ export default function TeamsPage() {
     <main className="min-h-screen bg-[#f3f5f9]">
       <AppNavbar />
 
-      <section className="mx-auto max-w-7xl px-6 py-8">
+      <section className="mx-auto max-w-[1800px] px-4 py-6 sm:px-6 lg:px-8 xl:px-10 2xl:px-12">
         <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
           <p className="text-sm font-medium text-[#1e3a8a]">Collaboration</p>
           <h1 className="mt-2 text-3xl font-bold text-gray-900">Teams</h1>
@@ -921,10 +1056,10 @@ export default function TeamsPage() {
           </div>
         )}
 
-        <div className="mt-8 space-y-8">
+        <div className="mt-8 grid gap-8 xl:grid-cols-2">
           <section>
             <h2 className="text-2xl font-bold text-gray-900">My Teams</h2>
-            <div className="mt-4 space-y-5">
+            <div className="mt-4 grid gap-5">
               {ownedTeams.length > 0 ? (
                 ownedTeams.map((team) => renderTeamCard(team, "owner"))
               ) : (
@@ -937,7 +1072,7 @@ export default function TeamsPage() {
 
           <section>
             <h2 className="text-2xl font-bold text-gray-900">Teams I&apos;m In</h2>
-            <div className="mt-4 space-y-5">
+            <div className="mt-4 grid gap-5">
               {memberTeams.length > 0 ? (
                 memberTeams.map((team) => renderTeamCard(team, "member"))
               ) : (
@@ -948,13 +1083,13 @@ export default function TeamsPage() {
             </div>
           </section>
 
-          <section>
+          <section className="xl:col-span-2">
             <h2 className="text-2xl font-bold text-gray-900">Available Teams</h2>
-            <div className="mt-4 grid gap-5 lg:grid-cols-2">
+            <div className="mt-4 grid gap-5 lg:grid-cols-2 2xl:grid-cols-3">
               {availableTeams.length > 0 ? (
                 availableTeams.map((team) => renderTeamCard(team, "available"))
               ) : (
-                <div className="rounded-2xl border border-dashed border-gray-300 bg-white p-6 text-sm text-gray-500 lg:col-span-2">
+                <div className="rounded-2xl border border-dashed border-gray-300 bg-white p-6 text-sm text-gray-500 lg:col-span-2 2xl:col-span-3">
                   No available teams right now.
                 </div>
               )}

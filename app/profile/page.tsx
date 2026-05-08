@@ -1104,7 +1104,7 @@ export default function ProfilePage() {
     return `${names.slice(0, 2).join(", ")} +${names.length - 2} more`;
   }, [joinedClubs]);
 
-  const effectiveManagedClub = managedClub || joinedClubs[0] || null;
+  const effectiveManagedClub = managedClub;
   const managedClubName = effectiveManagedClub ? getClubName(effectiveManagedClub) : "";
 
   const inputClass =
@@ -1114,7 +1114,7 @@ export default function ProfilePage() {
     return (
       <main className="min-h-screen bg-[#f3f5f9]">
         <AppNavbar />
-        <section className="mx-auto max-w-7xl px-6 py-8">
+        <section className="mx-auto max-w-[1800px] px-4 py-8 sm:px-6 lg:px-8 xl:px-10 2xl:px-12">
           <div className="rounded-2xl border border-gray-200 bg-white p-6 text-sm text-gray-600 shadow-sm">
             Loading profile...
           </div>
@@ -1127,7 +1127,7 @@ export default function ProfilePage() {
     return (
       <main className="min-h-screen bg-[#f3f5f9]">
         <AppNavbar />
-        <section className="mx-auto max-w-7xl px-6 py-8">
+        <section className="mx-auto max-w-[1800px] px-4 py-8 sm:px-6 lg:px-8 xl:px-10 2xl:px-12">
           <div className="rounded-2xl border border-red-200 bg-red-50 p-6 text-sm text-red-600 shadow-sm">
             {error}
           </div>
@@ -1140,7 +1140,7 @@ export default function ProfilePage() {
     <main className="min-h-screen bg-[#f3f5f9]">
       <AppNavbar />
 
-      <section className="mx-auto max-w-7xl px-6 py-8">
+      <section className="mx-auto max-w-[1800px] px-4 py-8 sm:px-6 lg:px-8 xl:px-10 2xl:px-12">
         {error && (
           <div className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-600">
             {error}
@@ -1153,17 +1153,17 @@ export default function ProfilePage() {
           </div>
         )}
 
-        <div className="grid gap-6 justify-center">
-          <div className="w-full max-w-3xl rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
-            <div className="flex flex-col gap-6 sm:flex-row sm:items-center">
+        <div className="grid gap-6">
+          <div className="w-full rounded-2xl border border-gray-200 bg-white p-6 shadow-sm lg:p-8">
+            <div className="flex flex-col gap-6 lg:flex-row lg:items-center">
               <div className="flex flex-col items-center gap-3">
-                <div className="relative flex h-24 w-24 items-center justify-center overflow-hidden rounded-full bg-[#e8eefc] text-3xl font-bold text-[#1e3a8a]">
+                <div className="relative flex h-28 w-28 items-center justify-center overflow-hidden rounded-full bg-[#e8eefc] text-3xl font-bold text-[#1e3a8a]">
                   {avatarUrl ? (
                     <Image
                       src={avatarUrl}
                       alt="Profile avatar"
-                      width={96}
-                      height={96}
+                      width={112}
+                      height={112}
                       className="h-full w-full object-cover"
                     />
                   ) : (
@@ -1193,11 +1193,11 @@ export default function ProfilePage() {
                 )}
               </div>
 
-              <div className="flex-1">
-                <h2 className="text-2xl font-bold text-gray-900">
+              <div className="min-w-0 flex-1">
+                <h2 className="text-3xl font-bold text-gray-900">
                   {fullName || profile?.full_name || "Student User"}
                 </h2>
-                <div className="mt-2 flex items-center gap-2">
+                <div className="mt-2 flex flex-wrap items-center gap-2">
                   {profile?.portal_verified && (
                     <span className="rounded-full bg-green-50 px-2 py-1 text-xs font-medium text-green-700">
                       Verified
@@ -1206,11 +1206,6 @@ export default function ProfilePage() {
                   {profile?.is_admin && (
                     <span className="rounded-full bg-[#fef3c7] px-2 py-1 text-xs font-medium text-[#92400e]">
                       Admin
-                    </span>
-                  )}
-                  {profile?.is_club_admin && !managedClubName && (
-                    <span className="rounded-full bg-[#ede9fe] px-2 py-1 text-xs font-medium text-[#6d28d9]">
-                      Club Admin
                     </span>
                   )}
                   {managedClubName && (
@@ -1240,7 +1235,7 @@ export default function ProfilePage() {
                     setSuccess("");
                     setError("");
                   }}
-                  className="rounded-xl border border-[#1e3a8a] px-4 py-2 text-sm font-medium text-[#1e3a8a] transition hover:bg-[#eef3ff]"
+                  className="rounded-xl border border-[#1e3a8a] px-4 py-2 text-sm font-medium text-[#1e3a8a] transition hover:bg-[#eef3ff] lg:self-start"
                 >
                   Edit Profile
                 </button>
@@ -1346,7 +1341,7 @@ export default function ProfilePage() {
               </div>
             )}
 
-            <div className="mt-8 grid gap-6 sm:grid-cols-2">
+            <div className="mt-8 grid gap-6 md:grid-cols-2 xl:grid-cols-3">
               <div>
                 <h3 className="text-sm font-semibold text-gray-500">Email</h3>
                 <p className="mt-2 text-base text-gray-900">
@@ -1441,7 +1436,7 @@ export default function ProfilePage() {
                   </div>
                 ) : (
                   <div className="mt-3 rounded-xl border border-gray-300 bg-white p-4">
-                    <div className="grid gap-3 sm:grid-cols-2">
+                    <div className="grid gap-3 sm:grid-cols-2 2xl:grid-cols-3">
                       {interestOptions.map((interest) => {
                         const selected = interests.includes(interest);
 
@@ -1541,7 +1536,7 @@ export default function ProfilePage() {
                 </div>
 
                 {joinedClubs.length > 0 ? (
-                  <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                  <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
                     {joinedClubs.map((club) => (
                       <Link
                         key={club.id}

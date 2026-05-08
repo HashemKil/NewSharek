@@ -1,5 +1,6 @@
-"use client";
+﻿"use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { supabase } from "../lib/supabase";
@@ -90,12 +91,18 @@ export default function AdminSidebar({ adminName }: AdminSidebarProps) {
   return (
     <aside className="flex h-screen w-64 flex-col border-r border-slate-200 bg-white">
       {/* Logo */}
-      <div className="flex items-center gap-3 border-b border-slate-200 px-6 py-5">
-        <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#1e3a8a]">
-          <span className="text-sm font-bold text-white">S</span>
-        </div>
-        <div>
-          <p className="text-sm font-bold text-slate-900">Sharek</p>
+      <div className="border-b border-slate-200 px-5 py-5">
+        <Link href="/admin" className="block">
+          <Image
+            src="/brand/sharek-logo-cropped.png"
+            alt="Sharek"
+            width={170}
+            height={64}
+            priority
+            className="h-11 w-auto object-contain"
+          />
+        </Link>
+        <div className="mt-1 pl-1">
           <p className="text-xs text-slate-400">Admin Panel</p>
         </div>
       </div>
@@ -179,3 +186,4 @@ export default function AdminSidebar({ adminName }: AdminSidebarProps) {
     </aside>
   );
 }
+

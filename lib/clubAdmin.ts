@@ -4,17 +4,16 @@ import { getCachedJoinedClubs } from "./clubMembership";
 export type ManagedClub = {
   id: string;
   name: string | null;
-  title: string | null;
+  title?: string | null;
   category: string | null;
   description?: string | null;
-  president?: string | null;
   logo_url?: string | null;
 };
 
 async function getLegacyManagedClub(userId: string): Promise<ManagedClub | null> {
   const membershipResult = await supabase
     .from("club_members")
-    .select("club_id, clubs(id, name, title, category, description)")
+    .select("club_id, clubs(id, name, category, description)")
     .eq("user_id", userId)
     .limit(1)
     .maybeSingle();
@@ -37,7 +36,6 @@ async function getLegacyManagedClub(userId: string): Promise<ManagedClub | null>
           title: cachedClub.title ?? null,
           category: cachedClub.category ?? null,
           description: null,
-          president: null,
           logo_url: null,
         }
       : null;
@@ -81,7 +79,7 @@ export async function getClubAdminContext(): Promise<ClubAdminContext> {
 
   const { data: managedClubData, error: managedClubError } = await supabase
     .from("clubs")
-    .select("id, name, title, category, description, president, logo_url")
+    .select("id, name, category, description, logo_url")
     .eq("club_admin_id", user.id)
     .limit(1)
     .maybeSingle();

@@ -1,7 +1,12 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { type ChangeEvent, useEffect, useMemo, useState } from "react";
 import { getClubAdminContext, type ManagedClub } from "../../../lib/clubAdmin";
+import {
+  EVENT_CATEGORIES,
+  inferEventCategory,
+  normalizeEventCategory,
+} from "../../../lib/eventCategories";
 import { supabase } from "../../../lib/supabase";
 
 type ClubEvent = {
@@ -9,11 +14,21 @@ type ClubEvent = {
   title: string;
   description: string | null;
   category: string | null;
+  prize: string | null;
+  image_url?: string | null;
   event_date: string | null;
+  end_date: string | null;
+  registration_deadline: string | null;
+  start_time: string | null;
+  end_time: string | null;
   location: string | null;
+  location_details: string | null;
   approval_status: string | null;
   created_at: string | null;
   is_club_members_only: boolean | null;
+  is_team_based: boolean | null;
+  is_university_event: boolean | null;
+  max_capacity: number | null;
   club_id: string | null;
 };
 
@@ -21,21 +36,105 @@ type EventForm = {
   title: string;
   description: string;
   category: string;
+  prize: string;
+  image_url: string;
   event_date: string;
+  end_date: string;
+  registration_deadline: string;
+  start_time: string;
+  end_time: string;
   location: string;
+  location_details: string;
   is_club_members_only: boolean;
+  is_team_based: boolean;
+  max_capacity: string;
+};
+
+type EventRegistration = {
+  id: string;
+  event_id: string;
+  user_id: string;
+  full_name: string | null;
+  email: string | null;
+  student_id: string | null;
+  major: string | null;
+  academic_year: string | null;
+  status: "pending" | "approved" | "rejected" | null;
+  created_at: string | null;
 };
 
 const inputCls =
   "w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-800 placeholder-slate-400 outline-none transition focus:border-[#1e3a8a] focus:bg-white focus:ring-2 focus:ring-[#1e3a8a]/10";
 
+const MAX_EVENT_IMAGE_SIZE_BYTES = 3 * 1024 * 1024;
+
+const readImageFile = (file: File) =>
+  new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ""));
+    reader.onerror = () => reject(new Error("Could not read this image."));
+    reader.readAsDataURL(file);
+  });
+
+function toDateTimeInput(value: string | null) {
+  if (!value) return "";
+  return value.slice(0, 16);
+}
+
+const fullEventSelect =
+  "id, title, description, category, prize, image_url, event_date, end_date, registration_deadline, start_time, end_time, location, location_details, approval_status, created_at, is_club_members_only, is_team_based, is_university_event, max_capacity, club_id";
+
+const legacyEventSelect =
+  "id, title, description, category, event_date, location, approval_status, created_at, is_club_members_only, club_id";
+
+function isMissingColumnError(error: { message?: string; code?: string } | null) {
+  if (!error) return false;
+  return (
+    error.code === "42703" ||
+    error.code === "PGRST204" ||
+    /column .* does not exist|could not find .* column/i.test(error.message ?? "")
+  );
+}
+
+function CategorySelect({
+  value,
+  onChange,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+}) {
+  return (
+    <select
+      value={normalizeEventCategory(value)}
+      onChange={(event) => onChange(event.target.value)}
+      className={inputCls}
+    >
+      <option value="">Choose category</option>
+      {EVENT_CATEGORIES.map((category) => (
+        <option key={category} value={category}>
+          {category}
+        </option>
+      ))}
+    </select>
+  );
+}
+
 const emptyForm: EventForm = {
   title: "",
   description: "",
   category: "",
+  prize: "",
+  image_url: "",
   event_date: "",
+  end_date: "",
+  registration_deadline: "",
+  start_time: "",
+  end_time: "",
   location: "",
+  location_details: "",
   is_club_members_only: false,
+  is_team_based: false,
+  max_capacity: "",
 };
 
 const statusStyles: Record<string, string> = {
@@ -52,6 +151,8 @@ export default function ClubAdminEventsPage() {
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [editingEvent, setEditingEvent] = useState<ClubEvent | null>(null);
   const [form, setForm] = useState<EventForm>(emptyForm);
+  const [registrations, setRegistrations] = useState<EventRegistration[]>([]);
+  const [registrationActionId, setRegistrationActionId] = useState<string | null>(null);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
 
@@ -72,20 +173,85 @@ export default function ClubAdminEventsPage() {
 
     const { data, error: eventsError } = await supabase
       .from("events")
-      .select(
-        "id, title, description, category, event_date, location, approval_status, created_at, is_club_members_only, club_id"
-      )
+      .select(fullEventSelect)
       .eq("club_id", context.managedClub.id)
       .order("created_at", { ascending: false });
 
     if (eventsError) {
-      setError(eventsError.message);
-      setEvents([]);
+      if (isMissingColumnError(eventsError)) {
+        const { data: legacyData, error: legacyError } = await supabase
+          .from("events")
+          .select(legacyEventSelect)
+          .eq("club_id", context.managedClub.id)
+          .order("created_at", { ascending: false });
+
+        if (legacyError) {
+          setError(legacyError.message);
+          setEvents([]);
+        } else {
+          const legacyEvents = (legacyData ?? []) as ClubEvent[];
+          setEvents(legacyEvents);
+          await loadRegistrations(legacyEvents);
+          setError(
+            "Event schedule fields are not installed yet. Run event-schedule-fields.sql to enable end date, deadline, time, capacity, and team fields."
+          );
+        }
+      } else {
+        setError(eventsError.message);
+        setEvents([]);
+      }
     } else {
-      setEvents((data ?? []) as ClubEvent[]);
+      const loadedEvents = (data ?? []) as ClubEvent[];
+      setEvents(loadedEvents);
+      await loadRegistrations(loadedEvents);
     }
 
     setLoading(false);
+  };
+
+  const loadRegistrations = async (clubEvents: ClubEvent[]) => {
+    const eventIds = clubEvents.map((event) => event.id);
+    if (eventIds.length === 0) {
+      setRegistrations([]);
+      return;
+    }
+
+    const { data, error: registrationError } = await supabase
+      .from("event_registrations")
+      .select(
+        "id, event_id, user_id, full_name, email, student_id, major, academic_year, status, created_at"
+      )
+      .in("event_id", eventIds)
+      .order("created_at", { ascending: false });
+
+    if (registrationError) {
+      if (isMissingColumnError(registrationError)) {
+        const { data: legacyData, error: legacyError } = await supabase
+          .from("event_registrations")
+          .select(
+            "id, event_id, user_id, full_name, email, student_id, major, academic_year, created_at"
+          )
+          .in("event_id", eventIds)
+          .order("created_at", { ascending: false });
+
+        if (legacyError) {
+          setRegistrations([]);
+          return;
+        }
+
+        setRegistrations(
+          ((legacyData ?? []) as Omit<EventRegistration, "status">[]).map(
+            (registration) => ({ ...registration, status: "approved" })
+          )
+        );
+        return;
+      }
+
+      setRegistrations([]);
+      return;
+    }
+
+    setRegistrations((data ?? []) as EventRegistration[]);
   };
 
   useEffect(() => {
@@ -104,9 +270,82 @@ export default function ClubAdminEventsPage() {
     [events]
   );
 
+  const pendingRegistrationCount = useMemo(
+    () => registrations.filter((registration) => registration.status === "pending").length,
+    [registrations]
+  );
+
+  const registrationsByEventId = useMemo(() => {
+    const map = new Map<string, EventRegistration[]>();
+    registrations.forEach((registration) => {
+      const eventRegistrations = map.get(registration.event_id) ?? [];
+      eventRegistrations.push(registration);
+      map.set(registration.event_id, eventRegistrations);
+    });
+    return map;
+  }, [registrations]);
+
+  const handleRegistrationStatus = async (
+    registration: EventRegistration,
+    status: "approved" | "rejected"
+  ) => {
+    setRegistrationActionId(registration.id);
+    setError("");
+    setSuccess("");
+
+    const { error: updateError } = await supabase
+      .from("event_registrations")
+      .update({ status })
+      .eq("id", registration.id);
+
+    if (updateError) {
+      setError(updateError.message);
+    } else {
+      setRegistrations((current) =>
+        current.map((item) =>
+          item.id === registration.id ? { ...item, status } : item
+        )
+      );
+      setSuccess(status === "approved" ? "Event join request approved." : "Event join request rejected.");
+      setTimeout(() => setSuccess(""), 3000);
+    }
+
+    setRegistrationActionId(null);
+  };
+
   const resetForm = () => {
     setForm(emptyForm);
     setEditingEvent(null);
+  };
+
+  const handleImageFile = async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+
+    setError("");
+    setSuccess("");
+
+    if (!file.type.startsWith("image/")) {
+      setError("Choose an image file.");
+      return;
+    }
+
+    if (file.size > MAX_EVENT_IMAGE_SIZE_BYTES) {
+      setError("Choose an image smaller than 3 MB.");
+      return;
+    }
+
+    try {
+      const imageUrl = await readImageFile(file);
+      setForm((current) => ({ ...current, image_url: imageUrl }));
+    } catch (uploadError) {
+      setError(
+        uploadError instanceof Error
+          ? uploadError.message
+          : "Could not upload this image."
+      );
+    }
   };
 
   const startEditing = (event: ClubEvent) => {
@@ -115,9 +354,18 @@ export default function ClubAdminEventsPage() {
       title: event.title ?? "",
       description: event.description ?? "",
       category: event.category ?? "",
+      prize: event.prize ?? "",
+      image_url: event.image_url ?? "",
       event_date: event.event_date ? event.event_date.slice(0, 10) : "",
+      end_date: event.end_date ? event.end_date.slice(0, 10) : "",
+      registration_deadline: toDateTimeInput(event.registration_deadline),
+      start_time: event.start_time ? event.start_time.slice(0, 5) : "",
+      end_time: event.end_time ? event.end_time.slice(0, 5) : "",
       location: event.location ?? "",
+      location_details: event.location_details ?? "",
       is_club_members_only: Boolean(event.is_club_members_only),
+      is_team_based: Boolean(event.is_team_based),
+      max_capacity: event.max_capacity ? String(event.max_capacity) : "",
     });
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
@@ -128,6 +376,19 @@ export default function ClubAdminEventsPage() {
       setError("Event title is required.");
       return;
     }
+    const selectedCategory = normalizeEventCategory(form.category);
+    if (!selectedCategory) {
+      setError("Choose an event category.");
+      return;
+    }
+    if (!form.event_date) {
+      setError("Start date is required.");
+      return;
+    }
+    if (form.end_date && form.end_date < form.event_date) {
+      setError("End date cannot be before the start date.");
+      return;
+    }
 
     setSaving(true);
     setError("");
@@ -136,53 +397,104 @@ export default function ClubAdminEventsPage() {
     const payload = {
       title: form.title.trim(),
       description: form.description.trim() || null,
-      category: form.category.trim() || null,
+      category: selectedCategory,
+      prize: form.prize.trim() || null,
+      image_url: form.image_url || null,
       event_date: form.event_date || null,
+      end_date: form.end_date || form.event_date || null,
+      registration_deadline: form.registration_deadline || null,
+      start_time: form.start_time || null,
+      end_time: form.end_time || null,
       location: form.location.trim() || null,
+      location_details: form.location_details.trim() || null,
       is_club_members_only: form.is_club_members_only,
+      is_team_based: form.is_team_based,
+      is_university_event: true,
+      max_capacity: form.max_capacity ? Number(form.max_capacity) : null,
       club_id: managedClub.id,
       approval_status:
         editingEvent?.approval_status === "approved"
           ? "pending"
           : editingEvent?.approval_status ?? "pending",
     };
+    const legacyPayload = {
+      title: payload.title,
+      description: payload.description,
+      category: payload.category,
+      event_date: payload.event_date,
+      location: payload.location,
+      is_club_members_only: payload.is_club_members_only,
+      club_id: payload.club_id,
+      approval_status: payload.approval_status,
+    };
 
     if (editingEvent) {
-      const { error: updateError } = await supabase
-        .from("events")
-        .update(payload)
-        .eq("id", editingEvent.id)
-        .eq("club_id", managedClub.id);
+      let updateError = (
+        await supabase
+          .from("events")
+          .update(payload)
+          .eq("id", editingEvent.id)
+          .eq("club_id", managedClub.id)
+      ).error;
+
+      let usedLegacyPayload = false;
+
+      if (isMissingColumnError(updateError)) {
+        updateError = (
+          await supabase
+            .from("events")
+            .update(legacyPayload)
+            .eq("id", editingEvent.id)
+            .eq("club_id", managedClub.id)
+        ).error;
+        usedLegacyPayload = !updateError;
+      }
 
       if (updateError) {
         setError(updateError.message);
       } else {
-        setEvents((prev) =>
+        const nextPayload = usedLegacyPayload ? legacyPayload : payload;
+      setEvents((prev) =>
           prev.map((event) =>
-            event.id === editingEvent.id ? { ...event, ...payload } : event
+            event.id === editingEvent.id ? { ...event, ...nextPayload } : event
           )
         );
         setSuccess(
-          editingEvent.approval_status === "approved"
+          usedLegacyPayload
+            ? "Event updated with basic fields. Run event-schedule-fields.sql to save schedule details."
+            : editingEvent.approval_status === "approved"
             ? "Event updated and sent back for admin approval."
             : "Event updated successfully."
         );
         resetForm();
       }
     } else {
-      const { data, error: insertError } = await supabase
+      let insertResult = await supabase
         .from("events")
         .insert(payload)
-        .select(
-          "id, title, description, category, event_date, location, approval_status, created_at, is_club_members_only, club_id"
-        )
+        .select(fullEventSelect)
         .single();
 
-      if (insertError) {
-        setError(insertError.message);
-      } else if (data) {
-        setEvents((prev) => [data as ClubEvent, ...prev]);
-        setSuccess("Event created and submitted for admin approval.");
+      let usedLegacyPayload = false;
+
+      if (isMissingColumnError(insertResult.error)) {
+        insertResult = await supabase
+          .from("events")
+          .insert(legacyPayload)
+          .select(legacyEventSelect)
+          .single();
+        usedLegacyPayload = !insertResult.error;
+      }
+
+      if (insertResult.error) {
+        setError(insertResult.error.message);
+      } else if (insertResult.data) {
+        setEvents((prev) => [insertResult.data as ClubEvent, ...prev]);
+        setSuccess(
+          usedLegacyPayload
+            ? "Event created with basic fields. Run event-schedule-fields.sql to save schedule details."
+            : "Event created and submitted for admin approval."
+        );
         resetForm();
       }
     }
@@ -217,7 +529,7 @@ export default function ClubAdminEventsPage() {
   };
 
   return (
-    <div className="px-8 py-8">
+    <div className="px-6 py-8 lg:px-10 2xl:px-12">
       <div className="mb-6 flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
         <div>
           <h1 className="text-2xl font-bold text-slate-900">Club Events</h1>
@@ -248,7 +560,7 @@ export default function ClubAdminEventsPage() {
         </div>
       )}
 
-      <div className="mb-6 grid gap-4 md:grid-cols-3">
+      <div className="mb-6 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
           <p className="text-sm font-medium text-slate-500">Total Events</p>
           <p className="mt-2 text-3xl font-bold text-slate-900">{events.length}</p>
@@ -260,6 +572,10 @@ export default function ClubAdminEventsPage() {
         <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
           <p className="text-sm font-medium text-slate-500">Approved</p>
           <p className="mt-2 text-3xl font-bold text-slate-900">{approvedCount}</p>
+        </div>
+        <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+          <p className="text-sm font-medium text-slate-500">Join Requests</p>
+          <p className="mt-2 text-3xl font-bold text-slate-900">{pendingRegistrationCount}</p>
         </div>
       </div>
 
@@ -283,8 +599,8 @@ export default function ClubAdminEventsPage() {
           )}
         </div>
 
-        <div className="grid gap-4 md:grid-cols-2">
-          <div className="md:col-span-2">
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+          <div className="md:col-span-2 xl:col-span-4">
             <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-slate-400">
               Event Title
             </label>
@@ -300,17 +616,69 @@ export default function ClubAdminEventsPage() {
             <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-slate-400">
               Category
             </label>
-            <input
-              type="text"
+            <CategorySelect
               value={form.category}
-              onChange={(event) => setForm((prev) => ({ ...prev, category: event.target.value }))}
-              placeholder="Workshop, Hackathon, Seminar..."
-              className={inputCls}
+              onChange={(category) =>
+                setForm((prev) => ({ ...prev, category }))
+              }
             />
           </div>
           <div>
             <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-slate-400">
-              Event Date
+              Prize
+            </label>
+            <input
+              type="text"
+              value={form.prize}
+              onChange={(event) =>
+                setForm((prev) => ({ ...prev, prize: event.target.value }))
+              }
+              placeholder="Optional, e.g. 500 JOD or certificates"
+              className={inputCls}
+            />
+          </div>
+          <div className="md:col-span-2 xl:col-span-4">
+            <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-slate-400">
+              Event Image
+            </label>
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
+              {form.image_url ? (
+                <div
+                  role="img"
+                  aria-label="Event image preview"
+                  className="mb-3 h-44 w-full rounded-xl bg-cover bg-center"
+                  style={{ backgroundImage: `url(${form.image_url})` }}
+                />
+              ) : (
+                <div className="mb-3 flex h-32 items-center justify-center rounded-xl border border-dashed border-slate-300 bg-white text-sm text-slate-400">
+                  No image selected
+                </div>
+              )}
+              <div className="flex flex-wrap gap-3">
+                <label className="inline-flex cursor-pointer items-center justify-center rounded-xl bg-[#1e3a8a] px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-[#1e40af]">
+                  Upload from device
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={handleImageFile}
+                    className="sr-only"
+                  />
+                </label>
+                {form.image_url && (
+                  <button
+                    type="button"
+                    onClick={() => setForm((current) => ({ ...current, image_url: "" }))}
+                    className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-600 transition hover:bg-slate-100"
+                  >
+                    Remove image
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+          <div>
+            <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-slate-400">
+              Start Date
             </label>
             <input
               type="date"
@@ -319,7 +687,56 @@ export default function ClubAdminEventsPage() {
               className={inputCls}
             />
           </div>
-          <div className="md:col-span-2">
+          <div>
+            <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-slate-400">
+              End Date
+            </label>
+            <input
+              type="date"
+              value={form.end_date}
+              onChange={(event) => setForm((prev) => ({ ...prev, end_date: event.target.value }))}
+              className={inputCls}
+            />
+          </div>
+          <div className="md:col-span-2 xl:col-span-4">
+            <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-slate-400">
+              Registration Deadline
+            </label>
+            <input
+              type="datetime-local"
+              value={form.registration_deadline}
+              onChange={(event) =>
+                setForm((prev) => ({
+                  ...prev,
+                  registration_deadline: event.target.value,
+                }))
+              }
+              className={inputCls}
+            />
+          </div>
+          <div>
+            <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-slate-400">
+              Start Time
+            </label>
+            <input
+              type="time"
+              value={form.start_time}
+              onChange={(event) => setForm((prev) => ({ ...prev, start_time: event.target.value }))}
+              className={inputCls}
+            />
+          </div>
+          <div>
+            <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-slate-400">
+              End Time
+            </label>
+            <input
+              type="time"
+              value={form.end_time}
+              onChange={(event) => setForm((prev) => ({ ...prev, end_time: event.target.value }))}
+              className={inputCls}
+            />
+          </div>
+          <div className="md:col-span-2 xl:col-span-4">
             <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-slate-400">
               Location
             </label>
@@ -331,7 +748,57 @@ export default function ClubAdminEventsPage() {
               className={inputCls}
             />
           </div>
-          <div className="md:col-span-2">
+          <div className="md:col-span-2 xl:col-span-4">
+            <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-slate-400">
+              Location Details
+            </label>
+            <textarea
+              rows={3}
+              value={form.location_details}
+              onChange={(event) =>
+                setForm((prev) => ({
+                  ...prev,
+                  location_details: event.target.value,
+                }))
+              }
+              placeholder="Optional: building, floor, room, entrance, parking, or directions"
+              className={`${inputCls} resize-none`}
+            />
+          </div>
+          <div>
+            <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-slate-400">
+              Capacity
+            </label>
+            <input
+              type="number"
+              min="1"
+              value={form.max_capacity}
+              onChange={(event) => setForm((prev) => ({ ...prev, max_capacity: event.target.value }))}
+              placeholder={form.is_team_based ? "Number of teams" : "Leave blank for unlimited"}
+              className={inputCls}
+            />
+            {form.is_team_based && (
+              <p className="mt-1 text-xs text-slate-400">
+                For team-based events, capacity is the number of approved teams.
+              </p>
+            )}
+          </div>
+          <div className="flex items-end">
+            <label className="inline-flex w-full items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700">
+              <input
+                type="checkbox"
+                checked={form.is_team_based}
+                onChange={(event) =>
+                  setForm((prev) => ({
+                    ...prev,
+                    is_team_based: event.target.checked,
+                  }))
+                }
+              />
+              Team based event
+            </label>
+          </div>
+          <div className="md:col-span-2 xl:col-span-4">
             <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-slate-400">
               Description
             </label>
@@ -357,6 +824,15 @@ export default function ClubAdminEventsPage() {
               />
               Members only event
             </label>
+            {form.is_club_members_only && managedClub && (
+              <p className="mt-2 text-xs text-slate-400">
+                This event will be restricted to members of{" "}
+                <span className="font-semibold text-slate-600">
+                  {managedClub.name?.trim() || managedClub.title?.trim() || "your club"}
+                </span>
+                .
+              </p>
+            )}
           </div>
         </div>
 
@@ -404,6 +880,13 @@ export default function ClubAdminEventsPage() {
           <div className="divide-y divide-slate-100">
             {events.map((event) => {
               const status = event.approval_status ?? "approved";
+              const eventRegistrations = registrationsByEventId.get(event.id) ?? [];
+              const pendingRegistrations = eventRegistrations.filter(
+                (registration) => registration.status === "pending"
+              );
+              const approvedRegistrations = eventRegistrations.filter(
+                (registration) => (registration.status ?? "approved") === "approved"
+              );
 
               return (
                 <div
@@ -430,7 +913,13 @@ export default function ClubAdminEventsPage() {
                       {event.description || "No description provided."}
                     </p>
                     <div className="mt-3 flex flex-wrap gap-x-4 gap-y-2 text-xs text-slate-400">
-                      <span>{event.category || "No category"}</span>
+                      <span>
+                        {inferEventCategory(
+                          event.category,
+                          event.title,
+                          event.description
+                        ) || "No category"}
+                      </span>
                       <span>
                         {event.event_date
                           ? new Date(event.event_date).toLocaleDateString("en-GB", {
@@ -439,8 +928,105 @@ export default function ClubAdminEventsPage() {
                               year: "numeric",
                             })
                           : "No date"}
+                        {event.end_date && event.end_date !== event.event_date
+                          ? ` - ${new Date(event.end_date).toLocaleDateString("en-GB", {
+                              day: "2-digit",
+                              month: "short",
+                              year: "numeric",
+                            })}`
+                          : ""}
                       </span>
+                      <span>
+                        {event.start_time
+                          ? `${event.start_time.slice(0, 5)}${event.end_time ? ` - ${event.end_time.slice(0, 5)}` : ""}`
+                          : "No time"}
+                      </span>
+                      <span>
+                        {event.registration_deadline
+                          ? `Register by ${new Date(event.registration_deadline).toLocaleString("en-GB", {
+                              day: "2-digit",
+                              month: "short",
+                              year: "numeric",
+                              hour: "2-digit",
+                              minute: "2-digit",
+                            })}`
+                          : "No registration deadline"}
+                      </span>
+                      {event.prize && <span>Prize: {event.prize}</span>}
                       <span>{event.location || "No location"}</span>
+                      {event.location_details && <span>{event.location_details}</span>}
+                      <span>{event.max_capacity ? `${event.max_capacity} spots` : "Unlimited capacity"}</span>
+                      <span>
+                        {approvedRegistrations.length} approved
+                        {pendingRegistrations.length > 0
+                          ? ` · ${pendingRegistrations.length} pending`
+                          : ""}
+                      </span>
+                    </div>
+
+                    <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-4">
+                      <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+                        <div>
+                          <p className="text-sm font-semibold text-slate-800">
+                            Event join requests
+                          </p>
+                          <p className="text-xs text-slate-400">
+                            Approve students before they become event participants.
+                          </p>
+                        </div>
+                        <span className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-slate-600 ring-1 ring-inset ring-slate-200">
+                          {pendingRegistrations.length} pending
+                        </span>
+                      </div>
+
+                      {pendingRegistrations.length === 0 ? (
+                        <p className="mt-3 text-sm text-slate-400">
+                          No pending join requests.
+                        </p>
+                      ) : (
+                        <div className="mt-3 space-y-3">
+                          {pendingRegistrations.map((registration) => (
+                            <div
+                              key={registration.id}
+                              className="flex flex-col gap-3 rounded-xl border border-slate-200 bg-white p-3 sm:flex-row sm:items-center sm:justify-between"
+                            >
+                              <div>
+                                <p className="text-sm font-semibold text-slate-800">
+                                  {registration.full_name || "Unknown student"}
+                                </p>
+                                <p className="text-xs text-slate-400">
+                                  {registration.email || "No email"} ·{" "}
+                                  {registration.student_id || "No student ID"}
+                                </p>
+                              </div>
+                              <div className="flex flex-wrap gap-2">
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    handleRegistrationStatus(registration, "approved")
+                                  }
+                                  disabled={registrationActionId === registration.id}
+                                  className="rounded-xl bg-[#1e3a8a] px-3 py-2 text-xs font-semibold text-white transition hover:opacity-90 disabled:opacity-50"
+                                >
+                                  {registrationActionId === registration.id
+                                    ? "Saving..."
+                                    : "Approve"}
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    handleRegistrationStatus(registration, "rejected")
+                                  }
+                                  disabled={registrationActionId === registration.id}
+                                  className="rounded-xl border border-red-200 px-3 py-2 text-xs font-semibold text-red-600 transition hover:bg-red-50 disabled:opacity-50"
+                                >
+                                  Reject
+                                </button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   </div>
 

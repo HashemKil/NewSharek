@@ -60,6 +60,20 @@ type ClubMemberCountRow = {
   member_count: number;
 };
 
+type ClubMemberRow = {
+  club_id: string;
+  status?: "pending" | "approved" | "rejected" | null;
+};
+
+function isMissingClubMemberStatus(error: { message?: string; code?: string } | null) {
+  const message = (error?.message || "").toLowerCase();
+  return (
+    (error?.code === "PGRST204" || error?.code === "42703") &&
+    message.includes("status") &&
+    message.includes("club_members")
+  );
+}
+
 const getClubName = (club: ClubRow) =>
   club.name?.trim() || club.title?.trim() || "Untitled club";
 
@@ -109,6 +123,9 @@ export default function ClubDetailsPage() {
   const [events, setEvents] = useState<EventRow[]>([]);
   const [userId, setUserId] = useState("");
   const [isMember, setIsMember] = useState(false);
+  const [membershipStatus, setMembershipStatus] = useState<
+    "pending" | "approved" | "rejected" | null
+  >(null);
   const [memberCount, setMemberCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -119,13 +136,38 @@ export default function ClubDetailsPage() {
     const [membershipResult, memberCountsResult] = await Promise.all([
       supabase
         .from("club_members")
-        .select("club_id")
+        .select("club_id, status")
         .eq("club_id", currentClubId)
-        .eq("user_id", currentUserId),
+        .eq("user_id", currentUserId)
+        .neq("status", "rejected"),
       supabase.rpc("get_club_member_counts"),
     ]);
 
     if (membershipResult.error) {
+      if (isMissingClubMemberStatus(membershipResult.error)) {
+        const { data: legacyData, error: legacyError } = await supabase
+          .from("club_members")
+          .select("club_id")
+          .eq("club_id", currentClubId)
+          .eq("user_id", currentUserId);
+
+        if (legacyError) {
+          throw new Error(legacyError.message);
+        }
+
+        const counts = (memberCountsResult.data || []) as ClubMemberCountRow[];
+        const nextCount =
+          counts.find((item) => item.club_id === currentClubId)?.member_count ?? 0;
+
+        return {
+          status: ((legacyData || []) as ClubMemberRow[]).length > 0
+            ? ("approved" as const)
+            : null,
+          isMember: ((legacyData || []) as ClubMemberRow[]).length > 0,
+          memberCount: nextCount,
+        };
+      }
+
       throw new Error(membershipResult.error.message);
     }
 
@@ -136,9 +178,12 @@ export default function ClubDetailsPage() {
     const counts = (memberCountsResult.data || []) as ClubMemberCountRow[];
     const nextCount =
       counts.find((item) => item.club_id === currentClubId)?.member_count ?? 0;
+    const membership = ((membershipResult.data || []) as ClubMemberRow[])[0];
+    const status = membership?.status ?? null;
 
     return {
-      isMember: (membershipResult.data || []).length > 0,
+      status,
+      isMember: status === "approved",
       memberCount: nextCount,
     };
   };
@@ -166,9 +211,10 @@ export default function ClubDetailsPage() {
             supabase.from("clubs").select("*").eq("id", clubId).single(),
             supabase
               .from("club_members")
-              .select("club_id")
+              .select("club_id, status")
               .eq("club_id", clubId)
-              .eq("user_id", user.id),
+              .eq("user_id", user.id)
+              .neq("status", "rejected"),
             supabase.rpc("get_club_member_counts"),
           ]);
 
@@ -228,15 +274,36 @@ export default function ClubDetailsPage() {
         setEvents(((eventsData || []) as EventRow[]).filter(Boolean));
 
         if (membershipResult.error) {
-          console.error("CLUB MEMBERSHIP LOAD ERROR:", membershipResult.error);
-          setClubMembershipsAvailable(false);
-          setIsMember(getCachedJoinedClubIds(user.id).includes(clubId));
+          if (isMissingClubMemberStatus(membershipResult.error)) {
+            const legacyMembershipResult = await supabase
+              .from("club_members")
+              .select("club_id")
+              .eq("club_id", clubId)
+              .eq("user_id", user.id);
+
+            if (legacyMembershipResult.error) {
+              console.error("CLUB MEMBERSHIP LOAD ERROR:", legacyMembershipResult.error);
+              setClubMembershipsAvailable(false);
+              setIsMember(getCachedJoinedClubIds(user.id).includes(clubId));
+            } else {
+              setClubMembershipsAvailable(true);
+              const isLegacyMember =
+                (legacyMembershipResult.data || []).length > 0 ||
+                getCachedJoinedClubIds(user.id).includes(clubId);
+              setMembershipStatus(isLegacyMember ? "approved" : null);
+              setIsMember(isLegacyMember);
+            }
+          } else {
+            console.error("CLUB MEMBERSHIP LOAD ERROR:", membershipResult.error);
+            setClubMembershipsAvailable(false);
+            setIsMember(getCachedJoinedClubIds(user.id).includes(clubId));
+          }
         } else {
           setClubMembershipsAvailable(true);
-          setIsMember(
-            (membershipResult.data || []).length > 0 ||
-              getCachedJoinedClubIds(user.id).includes(clubId)
-          );
+          const membership = ((membershipResult.data || []) as ClubMemberRow[])[0];
+          const status = membership?.status ?? null;
+          setMembershipStatus(status);
+          setIsMember(status === "approved" || getCachedJoinedClubIds(user.id).includes(clubId));
         }
 
         const counts = (memberCountsResult.data || []) as ClubMemberCountRow[];
@@ -261,13 +328,16 @@ export default function ClubDetailsPage() {
 
     try {
       await joinClubMembership(club.id, userId);
-      cacheJoinedClubSummary(userId, {
-        id: club.id,
-        name: club.name,
-        title: club.title,
-        category: club.category,
-      });
       const nextState = await reloadMembershipState(userId, club.id);
+      if (nextState.status === "approved") {
+        cacheJoinedClubSummary(userId, {
+          id: club.id,
+          name: club.name,
+          title: club.title,
+          category: club.category,
+        });
+      }
+      setMembershipStatus(nextState.status);
       setIsMember(nextState.isMember || getCachedJoinedClubIds(userId).includes(club.id));
       setMemberCount(nextState.memberCount);
     } catch (joinError) {
@@ -291,6 +361,7 @@ export default function ClubDetailsPage() {
       await leaveClubMembership(club.id, userId);
       uncacheJoinedClubSummary(userId, club.id);
       const nextState = await reloadMembershipState(userId, club.id);
+      setMembershipStatus(nextState.status);
       setIsMember(nextState.isMember);
       setMemberCount(nextState.memberCount);
     } catch (leaveError) {
@@ -400,6 +471,15 @@ export default function ClubDetailsPage() {
                   >
                     {actionLoading ? "Leaving..." : "Leave club"}
                   </button>
+                ) : membershipStatus === "pending" ? (
+                  <button
+                    type="button"
+                    onClick={handleLeaveClub}
+                    disabled={actionLoading}
+                    className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-2 text-sm font-semibold text-amber-700 transition hover:bg-amber-100 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {actionLoading ? "Cancelling..." : "Pending approval"}
+                  </button>
                 ) : (
                   <button
                     type="button"
@@ -407,7 +487,7 @@ export default function ClubDetailsPage() {
                     disabled={actionLoading}
                     className="rounded-lg bg-[#1e3a8a] px-4 py-2 text-sm font-semibold text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
                   >
-                    {actionLoading ? "Joining..." : "Join club"}
+                    {actionLoading ? "Requesting..." : "Request to join"}
                   </button>
                 ))}
 

@@ -7,9 +7,7 @@ import { supabase } from "../../../lib/supabase";
 
 type ClubDetailsForm = {
   name: string;
-  title: string;
   category: string;
-  president: string;
   description: string;
   logo_url: string;
 };
@@ -20,9 +18,7 @@ const inputCls =
 function toFormValues(club: ManagedClub): ClubDetailsForm {
   return {
     name: club.name ?? "",
-    title: club.title ?? "",
     category: club.category ?? "",
-    president: club.president ?? "",
     description: club.description ?? "",
     logo_url: club.logo_url ?? "",
   };
@@ -32,9 +28,7 @@ export default function ClubAdminDetailsPage() {
   const [managedClub, setManagedClub] = useState<ManagedClub | null>(null);
   const [form, setForm] = useState<ClubDetailsForm>({
     name: "",
-    title: "",
     category: "",
-    president: "",
     description: "",
     logo_url: "",
   });
@@ -59,7 +53,7 @@ export default function ClubAdminDetailsPage() {
 
       const { data, error: clubError } = await supabase
         .from("clubs")
-        .select("id, name, title, category, description, president, logo_url")
+        .select("id, name, category, description, logo_url")
         .eq("id", context.managedClub.id)
         .maybeSingle();
 
@@ -124,9 +118,7 @@ export default function ClubAdminDetailsPage() {
 
     const payload = {
       name: form.name.trim() || null,
-      title: form.title.trim() || null,
       category: form.category.trim() || null,
-      president: form.president.trim() || null,
       description: form.description.trim() || null,
       logo_url: form.logo_url.trim() || null,
     };
@@ -153,7 +145,7 @@ export default function ClubAdminDetailsPage() {
   };
 
   return (
-    <div className="px-8 py-8">
+    <div className="px-6 py-8 lg:px-10 2xl:px-12">
       <div className="mb-6">
         <h1 className="text-2xl font-bold text-slate-900">Club Details</h1>
         <p className="mt-1 text-sm text-slate-500">
@@ -191,7 +183,7 @@ export default function ClubAdminDetailsPage() {
               {form.logo_url ? (
                 <Image
                   src={form.logo_url}
-                  alt={`${managedClub.name?.trim() || managedClub.title?.trim() || "Club"} logo`}
+                  alt={`${managedClub.name?.trim() || "Club"} logo`}
                   width={64}
                   height={64}
                   unoptimized
@@ -199,12 +191,12 @@ export default function ClubAdminDetailsPage() {
                 />
               ) : (
                 <div className="flex h-16 w-16 items-center justify-center rounded-2xl border border-slate-200 bg-[#eef3ff] text-2xl font-bold text-[#1e3a8a]">
-                  {(managedClub.name?.trim() || managedClub.title?.trim() || "C").charAt(0).toUpperCase()}
+                  {(managedClub.name?.trim() || "C").charAt(0).toUpperCase()}
                 </div>
               )}
               <div className="min-w-0">
                 <h2 className="text-xl font-semibold text-slate-900">
-                  {managedClub.name?.trim() || managedClub.title?.trim() || "Your Club"}
+                  {managedClub.name?.trim() || "Your Club"}
                 </h2>
                 <span className="mt-2 inline-flex rounded-full border border-slate-200 bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700">
                   {managedClub.category || "Club"}
@@ -231,20 +223,6 @@ export default function ClubAdminDetailsPage() {
               </div>
               <div>
                 <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-slate-400">
-                  Title
-                </label>
-                <input
-                  type="text"
-                  value={form.title}
-                  onChange={(event) =>
-                    setForm((prev) => ({ ...prev, title: event.target.value }))
-                  }
-                  className={inputCls}
-                  placeholder="Short title"
-                />
-              </div>
-              <div>
-                <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-slate-400">
                   Category
                 </label>
                 <input
@@ -255,20 +233,6 @@ export default function ClubAdminDetailsPage() {
                   }
                   className={inputCls}
                   placeholder="Tech, Business, Creative..."
-                />
-              </div>
-              <div>
-                <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-slate-400">
-                  President
-                </label>
-                <input
-                  type="text"
-                  value={form.president}
-                  onChange={(event) =>
-                    setForm((prev) => ({ ...prev, president: event.target.value }))
-                  }
-                  className={inputCls}
-                  placeholder="Club president"
                 />
               </div>
               <div className="md:col-span-2">

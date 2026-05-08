@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { inferEventCategory } from "../../lib/eventCategories";
 import { supabase } from "../../lib/supabase";
 
 type Stats = {
@@ -16,6 +17,7 @@ type RecentEvent = {
   id: string;
   title: string;
   category: string;
+  description: string | null;
   approval_status: string;
   event_date: string | null;
 };
@@ -69,7 +71,7 @@ export default function AdminDashboard() {
           supabase.from("profiles").select("is_club_admin, portal_verified"),
           supabase
             .from("events")
-            .select("id, title, category, approval_status, event_date")
+            .select("id, title, category, description, approval_status, event_date")
             .order("event_date", { ascending: false })
             .limit(100),
         ]);
@@ -107,7 +109,7 @@ export default function AdminDashboard() {
   }, []);
 
   return (
-    <div className="px-8 py-8">
+    <div className="px-6 py-8 lg:px-10 2xl:px-12">
       {/* Header */}
       <div className="mb-8">
         <h1 className="text-2xl font-bold text-slate-900">Admin Dashboard</h1>
@@ -176,7 +178,7 @@ export default function AdminDashboard() {
       )}
 
       {/* Quick Actions */}
-      <div className="mt-8 grid gap-4 sm:grid-cols-2">
+      <div className="mt-8 grid gap-4 sm:grid-cols-2 2xl:grid-cols-4">
         <Link
           href="/admin/events"
           className="flex items-center gap-4 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm transition hover:border-[#1e3a8a] hover:shadow-md"
@@ -271,7 +273,11 @@ export default function AdminDashboard() {
                         {event.title}
                       </td>
                       <td className="px-6 py-4 text-slate-500">
-                        {event.category ?? "—"}
+                        {inferEventCategory(
+                          event.category,
+                          event.title,
+                          event.description
+                        ) || "—"}
                       </td>
                       <td className="px-6 py-4 text-slate-500">
                         {event.event_date

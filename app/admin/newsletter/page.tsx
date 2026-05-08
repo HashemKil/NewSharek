@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { type ChangeEvent, useEffect, useState } from "react";
 import { supabase } from "../../../lib/supabase";
 
 type CarouselItem = {
@@ -21,6 +21,18 @@ const EMPTY_ITEM: CarouselItem = {
 
 const inputCls =
   "w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-800 placeholder-slate-400 outline-none transition focus:border-[#1e3a8a] focus:bg-white focus:ring-2 focus:ring-[#1e3a8a]/10";
+
+const MAX_IMAGE_SIZE_BYTES = 3 * 1024 * 1024;
+
+const isUploadedImage = (image: string) => image.startsWith("data:image/");
+
+const readImageFile = (file: File) =>
+  new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ""));
+    reader.onerror = () => reject(new Error("Could not read this image."));
+    reader.readAsDataURL(file);
+  });
 
 function Label({ children }: { children: React.ReactNode }) {
   return (
@@ -135,8 +147,41 @@ export default function AdminNewsletterPage() {
   };
 
   // ── Render ────────────────────────────────────────────────────────────────
+  const handleImageFile = async (
+    event: ChangeEvent<HTMLInputElement>,
+    mode: "add" | "edit"
+  ) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+
+    setError("");
+    setSuccess("");
+
+    if (!file.type.startsWith("image/")) {
+      setError("Choose an image file.");
+      return;
+    }
+
+    if (file.size > MAX_IMAGE_SIZE_BYTES) {
+      setError("Choose an image smaller than 3 MB.");
+      return;
+    }
+
+    try {
+      const image = await readImageFile(file);
+      if (mode === "add") {
+        setAddForm((current) => ({ ...current, image }));
+      } else {
+        setEditForm((current) => ({ ...current, image }));
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not upload this image.");
+    }
+  };
+
   return (
-    <div className="min-h-screen px-6 py-8 lg:px-10">
+    <div className="min-h-screen px-6 py-8 lg:px-10 2xl:px-12">
       {/* Header */}
       <div className="mb-6 flex items-center justify-between">
         <div>
@@ -247,14 +292,39 @@ export default function AdminNewsletterPage() {
                       />
                     </div>
                     <div className="sm:col-span-2">
-                      <Label>Background image URL</Label>
+                      <Label>Background image</Label>
+                      <div className="mb-3 flex flex-wrap items-center gap-3">
+                        <label className="inline-flex cursor-pointer items-center justify-center rounded-xl bg-[#1e3a8a] px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-[#1e40af]">
+                          Upload from device
+                          <input
+                            type="file"
+                            accept="image/*"
+                            onChange={(e) => handleImageFile(e, "edit")}
+                            className="sr-only"
+                          />
+                        </label>
+                        {editForm.image && (
+                          <button
+                            type="button"
+                            onClick={() => setEditForm({ ...editForm, image: "" })}
+                            className="rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-medium text-slate-600 transition hover:bg-slate-100"
+                          >
+                            Remove image
+                          </button>
+                        )}
+                      </div>
+                      <Label>Or paste image URL</Label>
                       <input
-                        type="url"
-                        value={editForm.image}
+                        type="text"
+                        value={isUploadedImage(editForm.image) ? "" : editForm.image}
                         onChange={(e) =>
                           setEditForm({ ...editForm, image: e.target.value })
                         }
-                        placeholder="https://images.unsplash.com/..."
+                        placeholder={
+                          isUploadedImage(editForm.image)
+                            ? "Image selected from your device"
+                            : "https://images.unsplash.com/..."
+                        }
                         className={inputCls}
                       />
                       {editForm.image && (
@@ -417,12 +487,37 @@ export default function AdminNewsletterPage() {
               />
             </div>
             <div className="sm:col-span-2">
-              <Label>Background image URL</Label>
+              <Label>Background image</Label>
+              <div className="mb-3 flex flex-wrap items-center gap-3">
+                <label className="inline-flex cursor-pointer items-center justify-center rounded-xl bg-[#1e3a8a] px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-[#1e40af]">
+                  Upload from device
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={(e) => handleImageFile(e, "add")}
+                    className="sr-only"
+                  />
+                </label>
+                {addForm.image && (
+                  <button
+                    type="button"
+                    onClick={() => setAddForm({ ...addForm, image: "" })}
+                    className="rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-medium text-slate-600 transition hover:bg-slate-100"
+                  >
+                    Remove image
+                  </button>
+                )}
+              </div>
+              <Label>Or paste image URL</Label>
               <input
-                type="url"
-                value={addForm.image}
+                type="text"
+                value={isUploadedImage(addForm.image) ? "" : addForm.image}
                 onChange={(e) => setAddForm({ ...addForm, image: e.target.value })}
-                placeholder="https://images.unsplash.com/..."
+                placeholder={
+                  isUploadedImage(addForm.image)
+                    ? "Image selected from your device"
+                    : "https://images.unsplash.com/..."
+                }
                 className={inputCls}
               />
               {addForm.image && (

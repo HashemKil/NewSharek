@@ -15,6 +15,8 @@ type ClubSummary = {
   category?: string | null;
 };
 
+export type ClubMembershipStatus = "pending" | "approved" | "rejected";
+
 function getStorageKey(userId: string) {
   return `sharek.joinedClubs.${userId}`;
 }
@@ -51,6 +53,15 @@ function isMissingRpc(error: { message?: string | null; code?: string | null }) 
     error.code === "PGRST202" ||
     message.includes("could not find the function") ||
     message.includes("schema cache")
+  );
+}
+
+function isMissingStatusColumn(error: { message?: string | null; code?: string | null }) {
+  const message = (error.message || "").toLowerCase();
+  return (
+    (error.code === "PGRST204" || error.code === "42703") &&
+    message.includes("status") &&
+    message.includes("club_members")
   );
 }
 
@@ -190,41 +201,67 @@ export async function mergeJoinedClubs(
 }
 
 export async function joinClubMembership(clubId: string, userId: string) {
-  const rpcResult = await supabase.rpc("join_club", {
-    target_club_id: clubId,
-  });
+  const { data: existing, error: existingError } = await supabase
+    .from("club_members")
+    .select("status")
+    .eq("club_id", clubId)
+    .eq("user_id", userId)
+    .maybeSingle<{ status: ClubMembershipStatus | null }>();
 
-  if (!rpcResult.error) {
-    cacheJoinedClub(userId, clubId);
-    return;
+  const hasApprovalStatus = !existingError;
+
+  if (existingError && !isMissingStatusColumn(existingError) && !isMissingRpc(existingError)) {
+    throw new Error(existingError.message);
   }
 
-  if (!isMissingRpc(rpcResult.error)) {
-    throw new Error(rpcResult.error.message);
+  if (!hasApprovalStatus) {
+    const rpcResult = await supabase.rpc("join_club", {
+      target_club_id: clubId,
+    });
+
+    if (!rpcResult.error) {
+      cacheJoinedClub(userId, clubId);
+      return "approved" as const;
+    }
+  }
+
+  if (existing?.status === "approved") {
+    cacheJoinedClub(userId, clubId);
+    return "approved" as const;
+  }
+
+  if (existing?.status === "pending") {
+    return "pending" as const;
   }
 
   const profile = await loadMemberProfile(userId);
 
-  const { error } = await supabase.from("club_members").insert({
-    club_id: clubId,
-    user_id: userId,
-    full_name: profile.full_name,
-    email: profile.email,
-    student_id: profile.student_id,
-    major: profile.major,
-    academic_year: profile.academic_year,
-  });
+  const membershipPayload = {
+      club_id: clubId,
+      user_id: userId,
+      full_name: profile.full_name,
+      email: profile.email,
+      student_id: profile.student_id,
+      major: profile.major,
+      academic_year: profile.academic_year,
+      ...(hasApprovalStatus ? { status: "pending" } : {}),
+    };
 
-  if (error && error.code !== "23505") {
+  const { error } = await supabase.from("club_members").upsert(
+    membershipPayload,
+    { onConflict: "club_id,user_id" }
+  );
+
+  if (error) {
     throw new Error(error.message);
   }
 
   const { data: membership, error: membershipError } = await supabase
     .from("club_members")
-    .select("club_id")
+    .select(hasApprovalStatus ? "club_id, status" : "club_id")
     .eq("club_id", clubId)
     .eq("user_id", userId)
-    .maybeSingle();
+    .maybeSingle<{ club_id: string; status?: ClubMembershipStatus | null }>();
 
   if (membershipError) {
     throw new Error(membershipError.message);
@@ -234,7 +271,12 @@ export async function joinClubMembership(clubId: string, userId: string) {
     throw new Error("Club join was not saved. Please try again.");
   }
 
-  cacheJoinedClub(userId, clubId);
+  if (!hasApprovalStatus || membership.status === "approved") {
+    cacheJoinedClub(userId, clubId);
+    return "approved" as const;
+  }
+
+  return "pending" as const;
 }
 
 export async function leaveClubMembership(clubId: string, userId: string) {

@@ -1,5 +1,6 @@
-"use client";
+﻿"use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
@@ -56,13 +57,21 @@ export default function AppNavbar() {
 
   return (
     <header className="sticky top-0 z-50 border-b border-gray-200 bg-white/90 backdrop-blur">
-      <div className="mx-auto flex max-w-7xl items-center justify-between px-6 py-4">
+      <div className="mx-auto flex max-w-[1800px] items-center justify-between px-4 py-4 sm:px-6 lg:px-8 xl:px-10 2xl:px-12">
 
         {/* Logo */}
-        <div className="flex flex-col">
-          <h1 className="text-2xl font-bold tracking-tight text-[#1e3a8a]">
-            Sharek
-          </h1>
+        <Link href="/home" className="flex items-center">
+          <Image
+            src="/brand/sharek-logo-cropped.png"
+            alt="Sharek"
+            width={210}
+            height={80}
+            priority
+            className="h-12 w-auto object-contain"
+          />
+        </Link>
+        <div className="sr-only">
+          <h1>Sharek</h1>
           <p className="text-xs text-gray-400">
             PSUT Collaboration Platform
           </p>
@@ -88,7 +97,7 @@ export default function AppNavbar() {
             );
           })}
 
-          {/* Admin link — only visible to admins */}
+          {/* Admin link â€” only visible to admins */}
           {isAdmin && (
             <Link
               href="/admin"
@@ -98,7 +107,7 @@ export default function AppNavbar() {
                   : "text-amber-600 hover:bg-amber-50 hover:text-amber-700"
               }`}
             >
-              ⚙ Admin
+              âš™ Admin
             </Link>
           )}
 
@@ -130,3 +139,4 @@ export default function AppNavbar() {
     </header>
   );
 }
+

@@ -380,7 +380,7 @@ export default function AdminUsersPage() {
       .slice(0, 2);
 
   return (
-    <div className="px-8 py-8">
+    <div className="px-6 py-8 lg:px-10 2xl:px-12">
       {/* Header */}
       <div className="mb-6">
         <h1 className="text-2xl font-bold text-slate-900">User Management</h1>

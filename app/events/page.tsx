@@ -2,7 +2,9 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import AppNavbar from "../../components/AppNavbar";
+import { EVENT_CATEGORIES, inferEventCategory } from "../../lib/eventCategories";
 import { supabase } from "../../lib/supabase";
 
 type EventRow = {
@@ -10,17 +12,22 @@ type EventRow = {
   title: string | null;
   description: string | null;
   category: string | null;
+  prize?: string | null;
   date?: string | null;
   event_date?: string | null;
+  end_date?: string | null;
+  registration_deadline?: string | null;
   start_time?: string | null;
   end_time?: string | null;
   location?: string | null;
+  location_details?: string | null;
   source_url?: string | null;
   image_url?: string | null;
   poster_url?: string | null;
   banner_url?: string | null;
   thumbnail_url?: string | null;
   club_id?: string | null;
+  approval_status?: string | null;
   registered_count?: number | null;
   max_capacity?: number | null;
   computed_status?: "upcoming" | "ongoing" | "completed" | null;
@@ -35,13 +42,18 @@ type EventItem = {
   title: string;
   description: string;
   category: string;
+  prize: string | null;
   date: string | null;
+  end_date: string | null;
+  registration_deadline: string | null;
   start_time: string | null;
   end_time: string | null;
   location: string;
+  location_details: string | null;
   source_url?: string | null;
   image_url: string | null;
   club_id?: string | null;
+  approval_status: string | null;
   registered_count: number;
   max_capacity: number | null;
   computed_status?: "upcoming" | "ongoing" | "completed";
@@ -58,15 +70,9 @@ type NormalizedEvent = EventItem & {
   status: "upcoming" | "ongoing" | "completed";
   fillPercentage: number;
   isFull: boolean;
+  isRegistrationClosed: boolean;
   daysFromToday: number | null;
   parsedDate: Date | null;
-};
-
-type TimelineDay = {
-  rawDateKey: string;
-  day: number;
-  leftPercent: number;
-  eventCount: number;
 };
 
 type TeamMembershipRow = {
@@ -75,7 +81,8 @@ type TeamMembershipRow = {
 
 type EventTypeRow = Pick<
   EventRow,
-  "id" | "is_team_based" | "is_university_event" | "is_club_members_only" | "club_id"
+  "id" | "approval_status" | "is_team_based" | "is_university_event" | "is_club_members_only" | "club_id"
+  | "end_date" | "registration_deadline"
   | "image_url" | "poster_url" | "banner_url" | "thumbnail_url"
 >;
 
@@ -88,6 +95,24 @@ type ClubRow = {
 type ClubMemberRow = {
   club_id: string;
 };
+
+type ProfileRow = {
+  id: string;
+  full_name: string | null;
+  email: string | null;
+  student_id: string | null;
+  major: string | null;
+  academic_year: string | null;
+};
+
+type PendingExternalJoin = {
+  eventId: string;
+  title: string;
+  url: string;
+  openedAt: number;
+};
+
+const EXTERNAL_JOIN_STORAGE_KEY = "sharek:pendingExternalEventJoin";
 
 const getClubName = (club: ClubRow) =>
   club.name?.trim() || club.title?.trim() || "University club";
@@ -105,6 +130,7 @@ const getEventImageUrl = (event: EventImageFields) =>
   null;
 
 const STATUS_TABS = [
+  "Still Available",
   "All Statuses",
   "Completed",
   "upcoming",
@@ -118,21 +144,38 @@ const EVENT_TYPE_TABS = [
   "Team",
 ] as const;
 
+const DATE_RANGE_FILTERS = [
+  "Any Date",
+  "Today",
+  "Next 7 Days",
+  "This Month",
+  "Future",
+  "Past",
+] as const;
+
 export default function EventsPage() {
+  const router = useRouter();
   const [events, setEvents] = useState<EventItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedStatus, setSelectedStatus] =
-    useState<(typeof STATUS_TABS)[number]>("All Statuses");
+    useState<(typeof STATUS_TABS)[number]>("Still Available");
   const [selectedEventType, setSelectedEventType] =
     useState<(typeof EVENT_TYPE_TABS)[number]>("All Types");
+  const [selectedDateRange, setSelectedDateRange] =
+    useState<(typeof DATE_RANGE_FILTERS)[number]>("Any Date");
   const [selectedCategory, setSelectedCategory] = useState("All Categories");
   const [selectedDateKey, setSelectedDateKey] = useState("");
-  const [jumpToDate, setJumpToDate] = useState("");
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
   const [joinedEvents, setJoinedEvents] = useState<string[]>([]);
   const [joinedClubIds, setJoinedClubIds] = useState<string[]>([]);
+  const [joinMessage, setJoinMessage] = useState("");
+  const [joiningEventId, setJoiningEventId] = useState<string | null>(null);
+  const [pendingExternalJoin, setPendingExternalJoin] =
+    useState<PendingExternalJoin | null>(null);
   const [statusClock, setStatusClock] = useState(0);
 
   const today = useMemo(() => {
@@ -142,11 +185,6 @@ export default function EventsPage() {
     return d;
   }, [statusClock]);
 
-  const [currentMonth, setCurrentMonth] = useState(() => {
-    const d = new Date();
-    return new Date(d.getFullYear(), d.getMonth(), 1);
-  });
-
   const mapRowToEvent = (row: EventRow): EventItem => {
     const pickedDate = row.event_date ?? row.date ?? null;
 
@@ -154,15 +192,20 @@ export default function EventsPage() {
       id: row.id,
       title: row.title ?? "Untitled Event",
       description: row.description ?? "",
-      category: row.category ?? "Event",
+      category: inferEventCategory(row.category, row.title, row.description),
+      prize: row.prize ?? null,
       date: pickedDate,
+      end_date: row.end_date ?? null,
+      registration_deadline: row.registration_deadline ?? null,
       start_time: row.start_time ?? null,
       end_time: row.end_time ?? null,
       location: row.location ?? "TBA",
+      location_details: row.location_details ?? null,
       source_url: row.source_url ?? null,
-      image_url: getEventImageUrl(row),
-      club_id: row.club_id ?? null,
-      registered_count: row.registered_count ?? 0,
+    image_url: getEventImageUrl(row),
+    club_id: row.club_id ?? null,
+    approval_status: row.approval_status ?? null,
+    registered_count: row.registered_count ?? 0,
       max_capacity: row.max_capacity ?? null,
       computed_status: row.computed_status ?? undefined,
       is_team_based: Boolean(row.is_team_based),
@@ -228,7 +271,7 @@ export default function EventsPage() {
         if (!viewError && viewData) {
           const eventIds = (viewData as EventRow[]).map((event) => event.id);
           const eventTypeSelect =
-            "id, is_team_based, is_university_event, is_club_members_only, club_id";
+            "id, approval_status, is_team_based, is_university_event, is_club_members_only, club_id, end_date, registration_deadline";
           const eventTypeImageSelect = `${eventTypeSelect}, image_url, poster_url, banner_url, thumbnail_url`;
           const typeResult = await supabase
             .from("events")
@@ -261,13 +304,24 @@ export default function EventsPage() {
               is_club_members_only:
                 typeByEventId.get(event.id)?.is_club_members_only ??
                 event.is_club_members_only,
+              approval_status:
+                typeByEventId.get(event.id)?.approval_status ??
+                event.approval_status,
               image_url:
                 getEventImageUrl(typeByEventId.get(event.id) ?? event) ??
                 getEventImageUrl(event),
+              end_date: typeByEventId.get(event.id)?.end_date ?? event.end_date,
+              registration_deadline:
+                typeByEventId.get(event.id)?.registration_deadline ??
+                event.registration_deadline,
               club_id: typeByEventId.get(event.id)?.club_id ?? event.club_id,
             })
           );
-          loadedEvents = await attachResponsibleClubs(loadedEvents);
+          loadedEvents = await attachResponsibleClubs(
+            loadedEvents.filter(
+              (event) => (event.approval_status ?? "approved") === "approved"
+            )
+          );
           setEvents(loadedEvents);
           setLoading(false);
           loadJoinedEvents(loadedEvents);
@@ -286,7 +340,11 @@ export default function EventsPage() {
         }
 
         loadedEvents = await attachResponsibleClubs(
-          ((tableData as EventRow[]) || []).map(mapRowToEvent)
+          ((tableData as EventRow[]) || [])
+            .map(mapRowToEvent)
+            .filter(
+              (event) => (event.approval_status ?? "approved") === "approved"
+            )
         );
         setEvents(loadedEvents);
         setLoading(false);
@@ -352,7 +410,8 @@ export default function EventsPage() {
     const { data: clubMemberships } = await supabase
       .from("club_members")
       .select("club_id")
-      .eq("user_id", user.id);
+      .eq("user_id", user.id)
+      .eq("status", "approved");
 
     setJoinedClubIds(
       ((clubMemberships || []) as ClubMemberRow[]).map(
@@ -361,12 +420,157 @@ export default function EventsPage() {
     );
   };
 
-  const handleJoinToggle = (eventId: string) => {
+  const markExternalEventJoined = useCallback(async (eventId: string) => {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+
+    if (!user) {
+      router.push("/login");
+      return false;
+    }
+
+    const { data: profile, error: profileError } = await supabase
+      .from("profiles")
+      .select("id, full_name, email, student_id, major, academic_year")
+      .eq("id", user.id)
+      .single();
+
+    if (profileError || !profile) {
+      setJoinMessage(profileError?.message ?? "Could not load your profile.");
+      return false;
+    }
+
+    const userProfile = profile as ProfileRow;
+    const { error: registrationError } = await supabase
+      .from("event_registrations")
+      .upsert(
+        {
+          event_id: eventId,
+          user_id: userProfile.id,
+          full_name: userProfile.full_name,
+          email: userProfile.email,
+          student_id: userProfile.student_id,
+          major: userProfile.major,
+          academic_year: userProfile.academic_year,
+          status: "approved",
+        },
+        { onConflict: "event_id,user_id" }
+      );
+
+    if (registrationError) {
+      setJoinMessage(registrationError.message);
+      return false;
+    }
+
+    const joinedEvent = events.find((event) => event.id === eventId);
+
     setJoinedEvents((prev) =>
-      prev.includes(eventId)
-        ? prev.filter((id) => id !== eventId)
-        : [...prev, eventId]
+      prev.includes(eventId) ? prev : [...prev, eventId]
     );
+    setJoinMessage(
+      joinedEvent?.is_team_based
+        ? "Marked as joined as group."
+        : "Marked as joined."
+    );
+    return true;
+  }, [events, router]);
+
+  const handleJoinEvent = async (eventId: string) => {
+    setJoiningEventId(eventId);
+    setJoinMessage("");
+
+    try {
+      await markExternalEventJoined(eventId);
+    } finally {
+      setJoiningEventId(null);
+    }
+  };
+
+  const askAboutExternalRegistration = useCallback(async () => {
+    const raw = window.localStorage.getItem(EXTERNAL_JOIN_STORAGE_KEY);
+    if (!raw) return;
+
+    let pending: PendingExternalJoin | null = null;
+    try {
+      pending = JSON.parse(raw) as PendingExternalJoin;
+    } catch {
+      window.localStorage.removeItem(EXTERNAL_JOIN_STORAGE_KEY);
+      return;
+    }
+
+    if (!pending?.eventId) {
+      window.localStorage.removeItem(EXTERNAL_JOIN_STORAGE_KEY);
+      return;
+    }
+
+    if (Date.now() - (pending.openedAt ?? 0) < 1500) return;
+
+    setPendingExternalJoin(pending);
+  }, []);
+
+  const confirmExternalRegistration = async (completed: boolean) => {
+    const pending = pendingExternalJoin;
+    window.localStorage.removeItem(EXTERNAL_JOIN_STORAGE_KEY);
+    setPendingExternalJoin(null);
+
+    if (!pending) return;
+
+    if (completed) {
+      await markExternalEventJoined(pending.eventId);
+    } else {
+      setJoinMessage("No problem. The event was not marked as joined.");
+    }
+  };
+
+  useEffect(() => {
+    const handleReturn = () => {
+      if (document.visibilityState === "visible") {
+        void askAboutExternalRegistration();
+      }
+    };
+
+    window.addEventListener("focus", handleReturn);
+    document.addEventListener("visibilitychange", handleReturn);
+
+    return () => {
+      window.removeEventListener("focus", handleReturn);
+      document.removeEventListener("visibilitychange", handleReturn);
+    };
+  }, [askAboutExternalRegistration]);
+
+  const handleExternalJoin = (event: NormalizedEvent) => {
+    if (!event.source_url) {
+      setJoinMessage("This event does not have an external registration link yet.");
+      return;
+    }
+
+    window.localStorage.setItem(
+      EXTERNAL_JOIN_STORAGE_KEY,
+      JSON.stringify({
+        eventId: event.id,
+        title: event.title,
+        url: event.source_url,
+        openedAt: Date.now(),
+      } satisfies PendingExternalJoin)
+    );
+
+    window.open(event.source_url, "_blank", "noopener,noreferrer");
+    setJoinMessage("Register on the external site, then come back to Sharek.");
+  };
+
+  const openEventDetails = (
+    eventId: string,
+    target: EventTarget | null
+  ) => {
+    if (
+      target instanceof HTMLElement &&
+      target.closest("a, button, input, select, textarea")
+    ) {
+      return;
+    }
+
+    router.push(`/events/${eventId}`);
   };
 
   const parseEventDateTime = useCallback((
@@ -408,12 +612,13 @@ export default function EventsPage() {
 
   const computeStatus = useCallback((
     date: string | null,
+    endDate: string | null,
     start: string | null,
     end: string | null
   ): "upcoming" | "ongoing" | "completed" => {
     const now = new Date();
     const startsAt = parseEventDateTime(date, start, "start");
-    const endsAt = parseEventDateTime(date, end, "end");
+    const endsAt = parseEventDateTime(endDate || date, end, "end");
 
     if (!startsAt || !endsAt) return "upcoming";
 
@@ -457,6 +662,16 @@ export default function EventsPage() {
     };
   };
 
+  const formatDateRange = useCallback((start: string | null, end: string | null) => {
+    const startInfo = formatDateInfo(start);
+    if (!end || end === start) return startInfo.displayDate;
+
+    const endInfo = formatDateInfo(end);
+    if (endInfo.rawDateKey === "no-date") return startInfo.displayDate;
+
+    return `${startInfo.displayDate} - ${endInfo.displayDate}`;
+  }, []);
+
   const formatTimeLabel = (start: string | null, end: string | null) => {
     const formatOne = (time: string) => {
       const [hours, minutes] = time.split(":");
@@ -488,29 +703,51 @@ export default function EventsPage() {
       return {
         ...event,
         rawDateKey: dateInfo.rawDateKey,
-        displayDate: dateInfo.displayDate,
+        displayDate: formatDateRange(event.date, event.end_date),
         parsedDate: dateInfo.parsed,
         timeLabel: formatTimeLabel(event.start_time, event.end_time),
-        status: computeStatus(event.date, event.start_time, event.end_time),
+        status: computeStatus(
+          event.date,
+          event.end_date,
+          event.start_time,
+          event.end_time
+        ),
         fillPercentage: max > 0 ? Math.min((registered / max) * 100, 100) : 0,
         isFull: max > 0 && registered >= max,
+        isRegistrationClosed: event.registration_deadline
+          ? new Date(event.registration_deadline) < new Date()
+          : false,
         daysFromToday,
       };
     });
-  }, [computeStatus, events, today]);
+  }, [computeStatus, events, formatDateRange, today]);
 
   const baseEvents = useMemo(() => normalizedEvents, [normalizedEvents]);
 
   const categoryOptions = useMemo(() => {
-    const categories = Array.from(
-      new Set(baseEvents.map((event) => event.category).filter(Boolean))
-    ).sort();
+    const availableCategories = new Set(
+      baseEvents.map((event) => event.category).filter(Boolean)
+    );
+    const categories = EVENT_CATEGORIES.filter((category) =>
+      availableCategories.has(category)
+    );
 
     return ["All Categories", ...categories];
   }, [baseEvents]);
 
+  const todayKey = useMemo(() => {
+    const year = today.getFullYear();
+    const month = String(today.getMonth() + 1).padStart(2, "0");
+    const day = String(today.getDate()).padStart(2, "0");
+    return `${year}-${month}-${day}`;
+  }, [today]);
+
   const filteredEvents = useMemo(() => {
     const search = searchTerm.trim().toLowerCase();
+    const weekEnd = new Date(today);
+    weekEnd.setDate(today.getDate() + 7);
+    const monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
+    const monthEnd = new Date(today.getFullYear(), today.getMonth() + 1, 0);
 
     return baseEvents
       .filter((event) => {
@@ -524,6 +761,10 @@ export default function EventsPage() {
 
         const matchesStatus =
           selectedStatus === "All Statuses" ||
+          (selectedStatus === "Still Available" &&
+            event.status !== "completed" &&
+            !event.isRegistrationClosed &&
+            !event.isFull) ||
           (selectedStatus === "Joined" && joinedEvents.includes(event.id)) ||
           (selectedStatus === "Completed" && event.status === "completed") ||
           event.status === selectedStatus;
@@ -537,8 +778,41 @@ export default function EventsPage() {
           (selectedEventType === "Solo" && !event.is_team_based) ||
           (selectedEventType === "Team" && event.is_team_based);
 
+        const matchesDateRange =
+          selectedDateRange === "Any Date" ||
+          (selectedDateRange === "Today" && event.rawDateKey === todayKey) ||
+          (selectedDateRange === "Next 7 Days" &&
+            Boolean(event.parsedDate) &&
+            event.parsedDate! >= today &&
+            event.parsedDate! <= weekEnd) ||
+          (selectedDateRange === "This Month" &&
+            Boolean(event.parsedDate) &&
+            event.parsedDate! >= monthStart &&
+            event.parsedDate! <= monthEnd) ||
+          (selectedDateRange === "Future" &&
+            Boolean(event.parsedDate) &&
+            event.parsedDate! >= today) ||
+          (selectedDateRange === "Past" &&
+            Boolean(event.parsedDate) &&
+            event.parsedDate! < today);
+
+        const fromDate = dateFrom ? new Date(`${dateFrom}T00:00:00`) : null;
+        const toDate = dateTo ? new Date(`${dateTo}T23:59:59`) : null;
+        const matchesCustomDateRange =
+          (!fromDate ||
+            Number.isNaN(fromDate.getTime()) ||
+            (Boolean(event.parsedDate) && event.parsedDate! >= fromDate)) &&
+          (!toDate ||
+            Number.isNaN(toDate.getTime()) ||
+            (Boolean(event.parsedDate) && event.parsedDate! <= toDate));
+
         return (
-          matchesSearch && matchesStatus && matchesCategory && matchesEventType
+          matchesSearch &&
+          matchesStatus &&
+          matchesCategory &&
+          matchesEventType &&
+          matchesDateRange &&
+          matchesCustomDateRange
         );
       })
       .sort((a, b) => {
@@ -556,147 +830,47 @@ export default function EventsPage() {
     selectedStatus,
     selectedCategory,
     selectedEventType,
+    selectedDateRange,
     joinedEvents,
+    dateFrom,
+    dateTo,
+    today,
+    todayKey,
   ]);
 
-  const availableMonths = useMemo(() => {
-    const map = new Map<string, Date>();
+  const joinedAvailableEvents = useMemo(
+    () =>
+      baseEvents
+        .filter(
+          (event) =>
+            joinedEvents.includes(event.id) && event.status !== "completed"
+        )
+        .sort((a, b) => {
+          const aTime = a.parsedDate
+            ? a.parsedDate.getTime()
+            : Number.POSITIVE_INFINITY;
+          const bTime = b.parsedDate
+            ? b.parsedDate.getTime()
+            : Number.POSITIVE_INFINITY;
+          return aTime - bTime;
+        }),
+    [baseEvents, joinedEvents]
+  );
 
-    filteredEvents.forEach((event) => {
-      if (!event.parsedDate) return;
-
-      const year = event.parsedDate.getFullYear();
-      const month = event.parsedDate.getMonth();
-      const key = `${year}-${month}`;
-
-      if (!map.has(key)) {
-        map.set(key, new Date(year, month, 1));
-      }
-    });
-
-    const months = Array.from(map.values()).sort(
-      (a, b) => a.getTime() - b.getTime()
-    );
-
-    if (months.length === 0) {
-      return [new Date(today.getFullYear(), today.getMonth(), 1)];
-    }
-
-    return months;
-  }, [filteredEvents, today]);
-
-  useEffect(() => {
-    const exists = availableMonths.some(
-      (m) =>
-        m.getFullYear() === currentMonth.getFullYear() &&
-        m.getMonth() === currentMonth.getMonth()
-    );
-
-    if (!exists && availableMonths.length > 0) {
-      setCurrentMonth(availableMonths[0]);
-    }
-  }, [availableMonths, currentMonth]);
-
-  useEffect(() => {
-    if (!jumpToDate) return;
-
-    const picked = new Date(`${jumpToDate}T00:00:00`);
-    if (Number.isNaN(picked.getTime())) return;
-
-    setCurrentMonth(new Date(picked.getFullYear(), picked.getMonth(), 1));
-    setSelectedDateKey(jumpToDate);
-  }, [jumpToDate]);
-
-  const monthEvents = useMemo(() => {
-    return filteredEvents.filter((event) => {
-      if (!event.parsedDate) return false;
-      return (
-        event.parsedDate.getFullYear() === currentMonth.getFullYear() &&
-        event.parsedDate.getMonth() === currentMonth.getMonth()
-      );
-    });
-  }, [filteredEvents, currentMonth]);
-
-  const daysInCurrentMonth = useMemo(() => {
-    return new Date(
-      currentMonth.getFullYear(),
-      currentMonth.getMonth() + 1,
-      0
-    ).getDate();
-  }, [currentMonth]);
-
-  const monthLabel = useMemo(() => {
-    return currentMonth.toLocaleDateString("en-GB", {
-      month: "long",
-      year: "numeric",
-    });
-  }, [currentMonth]);
-
-  const timelineDays = useMemo<TimelineDay[]>(() => {
-    const daysByKey = new Map<string, TimelineDay>();
-
-    monthEvents.forEach((event) => {
-      const day = event.parsedDate?.getDate() ?? 1;
-      const leftPercent =
-        daysInCurrentMonth <= 1
-          ? 0
-          : ((day - 1) / (daysInCurrentMonth - 1)) * 100;
-      const existingDay = daysByKey.get(event.rawDateKey);
-
-      if (existingDay) {
-        existingDay.eventCount += 1;
-      } else {
-        daysByKey.set(event.rawDateKey, {
-          rawDateKey: event.rawDateKey,
-          day,
-          leftPercent,
-          eventCount: 1,
-        });
-      }
-    });
-
-    return Array.from(daysByKey.values()).sort((a, b) => a.day - b.day);
-  }, [monthEvents, daysInCurrentMonth]);
-
-  useEffect(() => {
-    if (timelineDays.length === 0) {
-      setSelectedDateKey("");
-      return;
-    }
-
-    const exists = timelineDays.some(
-      (day) => day.rawDateKey === selectedDateKey
-    );
-
-    if (!selectedDateKey || !exists) {
-      setSelectedDateKey(timelineDays[0].rawDateKey);
-    }
-  }, [timelineDays, selectedDateKey]);
-
-  const selectedEvents = useMemo(() => {
-    if (!selectedDateKey) return [];
-    return monthEvents.filter((event) => event.rawDateKey === selectedDateKey);
-  }, [monthEvents, selectedDateKey]);
-
-  const currentMonthIndex = useMemo(() => {
-    return availableMonths.findIndex(
-      (m) =>
-        m.getFullYear() === currentMonth.getFullYear() &&
-        m.getMonth() === currentMonth.getMonth()
-    );
-  }, [availableMonths, currentMonth]);
-
-  const goToPrevMonth = () => {
-    if (currentMonthIndex <= 0) return;
-    setCurrentMonth(availableMonths[currentMonthIndex - 1]);
-    setSelectedDateKey("");
-  };
-
-  const goToNextMonth = () => {
-    if (currentMonthIndex >= availableMonths.length - 1) return;
-    setCurrentMonth(availableMonths[currentMonthIndex + 1]);
-    setSelectedDateKey("");
-  };
+  const availableMonths: Date[] = [];
+  const currentMonthIndex = 0;
+  const monthEvents: NormalizedEvent[] = [];
+  const timelineDays: Array<{
+    rawDateKey: string;
+    day: number;
+    leftPercent: number;
+    eventCount: number;
+  }> = [];
+  const daysInCurrentMonth = 0;
+  const monthLabel = "";
+  const goToPrevMonth = () => {};
+  const goToNextMonth = () => {};
+  const selectedEvents = filteredEvents;
 
   const getStatusBadge = (status: string) => {
     void status;
@@ -706,150 +880,43 @@ export default function EventsPage() {
   const eventTypeBadgeClass =
     "rounded-full border border-[#c7d5fb] bg-[#eef3ff] px-3 py-1 text-xs font-semibold text-[#1e3a8a]";
 
-  const getStatusFilterClass = (
-    tab: (typeof STATUS_TABS)[number],
-    active: boolean
-  ) => {
-    void tab;
-    const base = "rounded-full border px-4 py-2 text-sm font-semibold transition";
-
-    return active
-      ? `${base} border-sky-600 bg-sky-500 text-white shadow-sm`
-      : `${base} border-sky-200 bg-sky-50 text-sky-700 hover:bg-sky-100`;
-  };
-
-  const getTypeFilterClass = (type: (typeof EVENT_TYPE_TABS)[number], active: boolean) => {
-    const base = "rounded-full border px-4 py-2 text-sm font-semibold transition";
-
-    if (type === "All Types") {
-      return active
-        ? `${base} border-[#1e3a8a] bg-[#1e3a8a] text-white shadow-sm`
-        : `${base} border-[#c7d5fb] bg-[#eef3ff] text-[#1e3a8a] hover:bg-[#dfe8ff]`;
-    }
-
-    return active
-      ? `${base} border-[#1e3a8a] bg-[#1e3a8a] text-white shadow-sm`
-      : `${base} border-[#c7d5fb] bg-[#eef3ff] text-[#1e3a8a] hover:bg-[#dfe8ff]`;
-  };
-
-  const getCategoryFilterClass = (active: boolean) => {
-    const base = "rounded-full border px-4 py-2 text-sm font-semibold transition";
-
-    return active
-      ? `${base} border-slate-700 bg-slate-700 text-white shadow-sm`
-      : `${base} border-slate-200 bg-slate-100 text-slate-700 hover:bg-slate-200`;
-  };
-
   const resetFilters = () => {
     setSearchTerm("");
-    setSelectedStatus("All Statuses");
+    setSelectedStatus("Still Available");
     setSelectedEventType("All Types");
+    setSelectedDateRange("Any Date");
     setSelectedCategory("All Categories");
-    setSelectedDateKey("");
-    setJumpToDate("");
+    setDateFrom("");
+    setDateTo("");
   };
 
   const hasActiveFilters =
     searchTerm.trim() !== "" ||
-    selectedStatus !== "All Statuses" ||
+    selectedStatus !== "Still Available" ||
     selectedEventType !== "All Types" ||
+    selectedDateRange !== "Any Date" ||
     selectedCategory !== "All Categories" ||
-    Boolean(jumpToDate);
+    Boolean(dateFrom) ||
+    Boolean(dateTo);
 
   return (
     <main className="min-h-screen bg-slate-50">
       <AppNavbar />
 
-      <section className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
-        <div className="rounded-[30px] border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
-          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+      <section className="mx-auto max-w-[1800px] px-4 py-6 sm:px-6 lg:px-8 xl:px-10 2xl:px-12">
+        <div className="rounded-[24px] border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
             <div>
               <h1 className="text-2xl font-semibold text-slate-900">Events</h1>
-            </div>
-
-            <div className="w-full lg:max-w-xl">
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-end">
-                <input
-                  type="text"
-                  placeholder="Search events..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-[#1e3a8a] focus:bg-white focus:ring-4 focus:ring-[#1e3a8a]/10"
-                />
-
-                <div className="flex items-center gap-2">
-                  <label className="sr-only" htmlFor="jump-date">
-                    Go to date
-                  </label>
-                  <input
-                    id="jump-date"
-                    type="date"
-                    value={jumpToDate}
-                    onChange={(e) => setJumpToDate(e.target.value)}
-                    className="rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 outline-none transition focus:border-[#1e3a8a] focus:ring-4 focus:ring-[#1e3a8a]/10"
-                  />
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div className="mt-5 flex flex-wrap items-center gap-2">
-            {STATUS_TABS.map((tab) => {
-              const active = selectedStatus === tab;
-
-              return (
-                <button
-                  key={tab}
-                  onClick={() => setSelectedStatus(tab)}
-                  className={getStatusFilterClass(tab, active)}
-                >
-                  {tab === "upcoming"
-                    ? "Upcoming"
-                    : tab === "ongoing"
-                    ? "Ongoing"
-                    : tab}
-                </button>
-              );
-            })}
-          </div>
-
-          <div className="mt-4 flex flex-wrap items-center gap-2">
-            {EVENT_TYPE_TABS.map((type) => {
-              const active = selectedEventType === type;
-
-              return (
-                <button
-                  key={type}
-                  onClick={() => setSelectedEventType(type)}
-                  className={getTypeFilterClass(type, active)}
-                >
-                  {type}
-                </button>
-              );
-            })}
-          </div>
-
-          <div className="mt-4 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-            <div className="flex flex-wrap items-center gap-2">
-              {categoryOptions.map((category) => {
-                const active = selectedCategory === category;
-
-                return (
-                  <button
-                    key={category}
-                    onClick={() => setSelectedCategory(category)}
-                    className={getCategoryFilterClass(active)}
-                  >
-                    {category}
-                  </button>
-                );
-              })}
+              <p className="mt-1 text-sm text-slate-500">
+                Find events by status, date, type, and category.
+              </p>
             </div>
 
             <button
               onClick={resetFilters}
               disabled={!hasActiveFilters}
-              className={`rounded-2xl border px-4 py-2.5 text-sm font-medium transition ${
+              className={`rounded-xl border px-4 py-2.5 text-sm font-medium transition ${
                 hasActiveFilters
                   ? "border-slate-200 bg-white text-slate-600 hover:bg-slate-100"
                   : "cursor-not-allowed border-slate-100 bg-slate-50 text-slate-400"
@@ -857,6 +924,125 @@ export default function EventsPage() {
             >
               Reset filters
             </button>
+          </div>
+
+          <div className="mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-6">
+            <label className="md:col-span-2 xl:col-span-2">
+              <span className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-slate-400">
+                Search
+              </span>
+              <input
+                type="text"
+                placeholder="Search title, club, place, or category"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-[#1e3a8a] focus:bg-white focus:ring-4 focus:ring-[#1e3a8a]/10"
+              />
+            </label>
+
+            <label>
+              <span className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-slate-400">
+                Status
+              </span>
+              <select
+                value={selectedStatus}
+                onChange={(e) =>
+                  setSelectedStatus(e.target.value as (typeof STATUS_TABS)[number])
+                }
+                className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 outline-none transition focus:border-[#1e3a8a] focus:ring-4 focus:ring-[#1e3a8a]/10"
+              >
+                {STATUS_TABS.map((status) => (
+                  <option key={status} value={status}>
+                    {status === "upcoming"
+                      ? "Upcoming"
+                      : status === "ongoing"
+                      ? "Ongoing"
+                      : status}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <label>
+              <span className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-slate-400">
+                Event Type
+              </span>
+              <select
+                value={selectedEventType}
+                onChange={(e) =>
+                  setSelectedEventType(e.target.value as (typeof EVENT_TYPE_TABS)[number])
+                }
+                className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 outline-none transition focus:border-[#1e3a8a] focus:ring-4 focus:ring-[#1e3a8a]/10"
+              >
+                {EVENT_TYPE_TABS.map((type) => (
+                  <option key={type} value={type}>
+                    {type}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <label>
+              <span className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-slate-400">
+                Category
+              </span>
+              <select
+                value={selectedCategory}
+                onChange={(e) => setSelectedCategory(e.target.value)}
+                className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 outline-none transition focus:border-[#1e3a8a] focus:ring-4 focus:ring-[#1e3a8a]/10"
+              >
+                {categoryOptions.map((category) => (
+                  <option key={category} value={category}>
+                    {category}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <label>
+              <span className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-slate-400">
+                When
+              </span>
+              <select
+                value={selectedDateRange}
+                onChange={(e) =>
+                  setSelectedDateRange(e.target.value as (typeof DATE_RANGE_FILTERS)[number])
+                }
+                className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 outline-none transition focus:border-[#1e3a8a] focus:ring-4 focus:ring-[#1e3a8a]/10"
+              >
+                {DATE_RANGE_FILTERS.map((range) => (
+                  <option key={range} value={range}>
+                    {range}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <label>
+              <span className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-slate-400">
+                From Date
+              </span>
+              <input
+                type="date"
+                value={dateFrom}
+                onChange={(e) => setDateFrom(e.target.value)}
+                max={dateTo || undefined}
+                className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 outline-none transition focus:border-[#1e3a8a] focus:ring-4 focus:ring-[#1e3a8a]/10"
+              />
+            </label>
+
+            <label>
+              <span className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-slate-400">
+                To Date
+              </span>
+              <input
+                type="date"
+                value={dateTo}
+                onChange={(e) => setDateTo(e.target.value)}
+                min={dateFrom || undefined}
+                className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 outline-none transition focus:border-[#1e3a8a] focus:ring-4 focus:ring-[#1e3a8a]/10"
+              />
+            </label>
           </div>
         </div>
 
@@ -872,15 +1058,96 @@ export default function EventsPage() {
           </div>
         )}
 
+        {joinMessage && (
+          <div className="mt-6 rounded-[28px] border border-sky-200 bg-sky-50 p-6 text-sm text-sky-700 shadow-sm">
+            {joinMessage}
+          </div>
+        )}
+
         {!loading && !error && (
+          <>
+          <section className="mt-6 rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <h2 className="text-xl font-semibold text-slate-900">
+                  Joined Events
+                </h2>
+                <p className="mt-1 text-sm text-slate-500">
+                  Events you joined that are still upcoming or ongoing.
+                </p>
+              </div>
+              <span className="w-fit rounded-full bg-sky-50 px-3 py-1 text-xs font-semibold text-sky-700">
+                {joinedAvailableEvents.length} active
+              </span>
+            </div>
+
+            {joinedAvailableEvents.length > 0 ? (
+              <div className="mt-5 grid gap-4 lg:grid-cols-2 2xl:grid-cols-3">
+                {joinedAvailableEvents.map((event) => (
+                  <button
+                    key={event.id}
+                    type="button"
+                    onClick={() => router.push(`/events/${event.id}`)}
+                    className="rounded-3xl border border-sky-100 bg-sky-50/50 p-5 text-left transition hover:border-[#1e3a8a]/30 hover:bg-white hover:shadow-md focus:outline-none focus:ring-4 focus:ring-[#1e3a8a]/10"
+                  >
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-slate-700">
+                        {event.category}
+                      </span>
+                      <span className={eventTypeBadgeClass}>
+                        {getEventTypeLabel(event)}
+                      </span>
+                      <span className="rounded-full border border-sky-200 bg-white px-3 py-1 text-xs font-semibold text-sky-700">
+                        {event.is_team_based ? "Joined as group" : "Joined"}
+                      </span>
+                      <span
+                        className={`rounded-full border px-3 py-1 text-xs font-semibold ${getStatusBadge(
+                          event.status
+                        )}`}
+                      >
+                        {event.status}
+                      </span>
+                    </div>
+
+                    <h3 className="mt-3 line-clamp-2 text-lg font-semibold text-slate-900">
+                      {event.title}
+                    </h3>
+                    <div className="mt-4 grid gap-3 text-sm text-slate-500 sm:grid-cols-2">
+                      <div className="rounded-2xl bg-white px-4 py-3">
+                        <span className="block text-xs font-medium text-slate-400">
+                          Date
+                        </span>
+                        <span className="mt-1 block font-medium text-slate-700">
+                          {event.displayDate}
+                        </span>
+                      </div>
+                      <div className="rounded-2xl bg-white px-4 py-3">
+                        <span className="block text-xs font-medium text-slate-400">
+                          Place
+                        </span>
+                        <span className="mt-1 block truncate font-medium text-slate-700">
+                          {event.location || "TBA"}
+                        </span>
+                      </div>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            ) : (
+              <div className="mt-5 rounded-3xl border border-dashed border-slate-300 bg-slate-50 px-5 py-7 text-sm text-slate-500">
+                No active joined events yet.
+              </div>
+            )}
+          </section>
+
           <div className="mt-6 rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
             <div className="mb-5 flex items-center justify-between">
               <div>
                 <h2 className="text-xl font-semibold text-slate-900">
-                  Events Timeline
+                  Events
                 </h2>
                 <p className="mt-1 text-sm text-slate-500">
-                  Events are positioned based on their day inside the month.
+                  Showing all events that match the current filters.
                 </p>
               </div>
 
@@ -889,7 +1156,7 @@ export default function EventsPage() {
               </span>
             </div>
 
-            <div className="rounded-[24px] border border-slate-200 bg-slate-50 p-4 sm:p-6">
+            <div className="hidden">
               <div className="mb-8 flex items-center justify-between">
                 <button
                   onClick={goToPrevMonth}
@@ -996,7 +1263,7 @@ export default function EventsPage() {
               </div>
             </div>
 
-            <div className="mt-6 space-y-4">
+            <div className="grid gap-4 2xl:grid-cols-2">
               {selectedEvents.length > 0 ? (
                 selectedEvents.map((event) => {
                   const isJoined = joinedEvents.includes(event.id);
@@ -1004,11 +1271,24 @@ export default function EventsPage() {
                     event.is_club_members_only &&
                     Boolean(event.club_id) &&
                     !joinedClubIds.includes(event.club_id as string);
+                  const usesExternalRegistration =
+                    Boolean(event.source_url) && !event.is_university_event;
 
                   return (
                     <article
                       key={event.id}
-                      className="rounded-3xl border border-slate-200 bg-white p-5 transition hover:border-[#1e3a8a]/30 hover:shadow-md"
+                      role="link"
+                      tabIndex={0}
+                      onClick={(clickEvent) =>
+                        openEventDetails(event.id, clickEvent.target)
+                      }
+                      onKeyDown={(keyEvent) => {
+                        if (keyEvent.key === "Enter" || keyEvent.key === " ") {
+                          keyEvent.preventDefault();
+                          openEventDetails(event.id, keyEvent.target);
+                        }
+                      }}
+                      className="cursor-pointer rounded-3xl border border-slate-200 bg-white p-5 transition hover:border-[#1e3a8a]/30 hover:shadow-md focus:outline-none focus:ring-4 focus:ring-[#1e3a8a]/10"
                     >
                       {event.image_url && (
                         <img
@@ -1017,7 +1297,7 @@ export default function EventsPage() {
                           className="mb-5 h-64 w-full rounded-2xl object-cover"
                         />
                       )}
-                      <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+                      <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
                         <div className="flex-1">
                           <div className="flex flex-wrap items-center gap-2">
                             <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700">
@@ -1048,13 +1328,23 @@ export default function EventsPage() {
 
                             {isJoined && (
                               <span className="rounded-full border border-sky-200 bg-sky-50 px-3 py-1 text-xs font-semibold text-sky-700">
-                                Joined
+                                {event.is_team_based ? "Joined as group" : "Joined"}
                               </span>
                             )}
 
                             {event.isFull && (
                               <span className="rounded-full bg-red-50 px-3 py-1 text-xs font-semibold text-red-600">
                                 Full
+                              </span>
+                            )}
+                            {event.prize && (
+                              <span className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700">
+                                Prize: {event.prize}
+                              </span>
+                            )}
+                            {event.isRegistrationClosed && event.status !== "completed" && (
+                              <span className="rounded-full bg-red-50 px-3 py-1 text-xs font-semibold text-red-600">
+                                Registration closed
                               </span>
                             )}
                           </div>
@@ -1124,37 +1414,86 @@ export default function EventsPage() {
                             Details
                           </Link>
 
-                          <button
-                            onClick={() => handleJoinToggle(event.id)}
-                            disabled={
-                              isJoined ||
-                              (event.isFull && !isJoined) ||
-                              event.status === "completed" ||
-                              isLockedClubEvent
-                            }
-                            className={`rounded-2xl px-4 py-2.5 text-sm font-semibold transition ${
-                              event.status === "completed"
-                                ? "cursor-not-allowed border border-slate-200 bg-slate-100 text-slate-500"
+                          {usesExternalRegistration &&
+                          !isJoined &&
+                          !event.isFull &&
+                          event.status !== "completed" &&
+                          !event.isRegistrationClosed &&
+                          !isLockedClubEvent ? (
+                            <button
+                              onClick={(buttonEvent) => {
+                                buttonEvent.stopPropagation();
+                                handleExternalJoin(event);
+                              }}
+                              className="rounded-2xl bg-[#1e3a8a] px-4 py-2.5 text-sm font-semibold text-white transition hover:opacity-90"
+                            >
+                              {event.is_team_based ? "Join as group" : "Join"}
+                            </button>
+                          ) : event.is_team_based &&
+                            !isJoined &&
+                            !event.isFull &&
+                            event.status !== "completed" &&
+                            !event.isRegistrationClosed &&
+                            !isLockedClubEvent ? (
+                            <Link
+                              href={`/events/${event.id}`}
+                              className="rounded-2xl bg-[#1e3a8a] px-4 py-2.5 text-sm font-semibold text-white transition hover:opacity-90"
+                            >
+                              Join as group
+                            </Link>
+                          ) : (
+                            <button
+                              onClick={(buttonEvent) => {
+                                buttonEvent.stopPropagation();
+                                void handleJoinEvent(event.id);
+                              }}
+                              disabled={
+                                event.is_team_based ||
+                                isJoined ||
+                                joiningEventId === event.id ||
+                                (event.isFull && !isJoined) ||
+                                event.status === "completed" ||
+                                event.isRegistrationClosed ||
+                                isLockedClubEvent
+                              }
+                              className={`rounded-2xl px-4 py-2.5 text-sm font-semibold transition ${
+                                event.status === "completed"
+                                  ? "cursor-not-allowed border border-slate-200 bg-slate-100 text-slate-500"
+                                  : event.isRegistrationClosed
+                                  ? "cursor-not-allowed bg-red-50 text-red-600"
+                                  : joiningEventId === event.id
+                                  ? "cursor-wait bg-[#1e3a8a] text-white opacity-75"
+                                  : isJoined
+                                  ? "cursor-not-allowed bg-sky-50 text-sky-700"
+                                  : event.isFull && !isJoined
+                                  ? "cursor-not-allowed bg-slate-200 text-slate-500"
+                                  : isLockedClubEvent
+                                  ? "cursor-not-allowed bg-amber-50 text-amber-700"
+                                  : event.is_team_based
+                                  ? "cursor-not-allowed bg-slate-100 text-slate-500"
+                                  : "bg-[#1e3a8a] text-white hover:opacity-90"
+                              }`}
+                              title={isLockedClubEvent ? "Join the club first" : undefined}
+                            >
+                              {event.status === "completed"
+                                ? "Completed"
+                                : event.isRegistrationClosed
+                                ? "Registration closed"
+                                : joiningEventId === event.id
+                                ? "Joining..."
                                 : isJoined
-                                ? "cursor-not-allowed bg-sky-50 text-sky-700"
+                                ? event.is_team_based
+                                  ? "Joined as group"
+                                  : "Joined"
                                 : event.isFull && !isJoined
-                                ? "cursor-not-allowed bg-slate-200 text-slate-500"
+                                ? "Full"
                                 : isLockedClubEvent
-                                ? "cursor-not-allowed bg-amber-50 text-amber-700"
-                                : "bg-[#1e3a8a] text-white hover:opacity-90"
-                            }`}
-                            title={isLockedClubEvent ? "Join the club first" : undefined}
-                          >
-                            {event.status === "completed"
-                              ? "Completed"
-                              : isJoined
-                              ? "Joined"
-                              : event.isFull && !isJoined
-                              ? "Full"
-                              : isLockedClubEvent
-                              ? "Members only"
-                              : "Join"}
-                          </button>
+                                ? "Members only"
+                                : event.is_team_based
+                                ? "Join as group"
+                                : "Join"}
+                            </button>
+                          )}
                         </div>
                       </div>
                     </article>
@@ -1163,14 +1502,51 @@ export default function EventsPage() {
               ) : (
                 <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-10 text-center">
                   <p className="text-sm text-slate-500">
-                    No events in this month.
+                    No events match these filters.
                   </p>
                 </div>
               )}
             </div>
           </div>
+          </>
         )}
       </section>
+      {pendingExternalJoin && (
+        <div className="fixed inset-0 z-[80] flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-slate-950/40 backdrop-blur-sm" />
+          <div className="relative w-full max-w-md rounded-3xl border border-slate-200 bg-white p-6 shadow-2xl">
+            <p className="text-xs font-semibold uppercase tracking-wide text-[#1e3a8a]">
+              External registration
+            </p>
+            <h2 className="mt-2 text-xl font-bold text-slate-900">
+              Did you register?
+            </h2>
+            <p className="mt-3 text-sm leading-6 text-slate-500">
+              Did you finish registering for{" "}
+              <span className="font-semibold text-slate-700">
+                {pendingExternalJoin.title}
+              </span>{" "}
+              on the external event website?
+            </p>
+            <div className="mt-6 flex justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => confirmExternalRegistration(false)}
+                className="rounded-xl border border-slate-200 px-5 py-2.5 text-sm font-semibold text-slate-600 transition hover:bg-slate-50"
+              >
+                No
+              </button>
+              <button
+                type="button"
+                onClick={() => confirmExternalRegistration(true)}
+                className="rounded-xl bg-[#1e3a8a] px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-[#1e40af]"
+              >
+                Yes
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </main>
   );
 }

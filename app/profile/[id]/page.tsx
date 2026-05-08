@@ -29,11 +29,6 @@ type ManagedClub = {
   title?: string | null;
 };
 
-type ClubMembershipRow = {
-  club_id: string;
-  clubs?: ManagedClub | ManagedClub[] | null;
-};
-
 const getClubName = (club: ManagedClub) =>
   club.name?.trim() || club.title?.trim() || "Untitled club";
 
@@ -91,27 +86,7 @@ export default function MemberProfilePage() {
           console.warn("Could not load managed club:", managedClubError.message);
           setManagedClub(null);
         } else {
-          let nextManagedClub = (managedClubData as ManagedClub | null) || null;
-
-          if (!nextManagedClub) {
-            const { data: membershipData, error: membershipError } = await supabase
-              .from("club_members")
-              .select("club_id, clubs(id, name, title)")
-              .eq("user_id", loadedProfile.id)
-              .limit(1);
-
-            if (membershipError) {
-              console.warn("Could not load fallback club admin membership:", membershipError.message);
-            } else {
-              const membership = ((membershipData || []) as ClubMembershipRow[])[0];
-              const membershipClub = Array.isArray(membership?.clubs)
-                ? membership.clubs[0]
-                : membership?.clubs;
-              nextManagedClub = membershipClub || null;
-            }
-          }
-
-          setManagedClub(nextManagedClub);
+          setManagedClub((managedClubData as ManagedClub | null) || null);
         }
         setLoading(false);
 

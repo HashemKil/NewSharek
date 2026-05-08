@@ -41,12 +41,22 @@ type EventRow = {
 
 type ClubMemberRow = {
   club_id: string;
+  status?: "pending" | "approved" | "rejected" | null;
 };
 
 type ClubMemberCountRow = {
   club_id: string;
   member_count: number;
 };
+
+function isMissingClubMemberStatus(error: { message?: string; code?: string } | null) {
+  const message = (error?.message || "").toLowerCase();
+  return (
+    (error?.code === "PGRST204" || error?.code === "42703") &&
+    message.includes("status") &&
+    message.includes("club_members")
+  );
+}
 
 type Club = ClubRow & {
   displayName: string;
@@ -135,6 +145,7 @@ export default function ClubsPage() {
   const [error, setError] = useState("");
   const [userId, setUserId] = useState("");
   const [joinedClubIds, setJoinedClubIds] = useState<string[]>([]);
+  const [pendingClubIds, setPendingClubIds] = useState<string[]>([]);
   const [clubActionId, setClubActionId] = useState("");
   const [clubMembershipsAvailable, setClubMembershipsAvailable] = useState(true);
   const [search, setSearch] = useState("");
@@ -164,7 +175,11 @@ export default function ClubsPage() {
           supabase
             .from("events")
             .select("id, title, category, club_id, event_date"),
-          supabase.from("club_members").select("club_id").eq("user_id", user.id),
+          supabase
+            .from("club_members")
+            .select("club_id, status")
+            .eq("user_id", user.id)
+            .neq("status", "rejected"),
           supabase.rpc("get_club_member_counts"),
         ]);
 
@@ -212,15 +227,47 @@ export default function ClubsPage() {
         setClubs(loadedClubs);
 
         if (membershipsResult.error) {
-          console.error("CLUB MEMBERSHIPS LOAD ERROR:", membershipsResult.error);
-          setClubMembershipsAvailable(false);
-          setJoinedClubIds(getCachedJoinedClubIds(user.id));
+          if (isMissingClubMemberStatus(membershipsResult.error)) {
+            const legacyMembershipsResult = await supabase
+              .from("club_members")
+              .select("club_id")
+              .eq("user_id", user.id);
+
+            if (legacyMembershipsResult.error) {
+              console.error("CLUB MEMBERSHIPS LOAD ERROR:", legacyMembershipsResult.error);
+              setClubMembershipsAvailable(false);
+              setJoinedClubIds(getCachedJoinedClubIds(user.id));
+            } else {
+              setClubMembershipsAvailable(true);
+              setPendingClubIds([]);
+              setJoinedClubIds(
+                mergeJoinedClubIds(
+                  user.id,
+                  ((legacyMembershipsResult.data || []) as ClubMemberRow[]).map(
+                    (membership) => membership.club_id
+                  )
+                )
+              );
+            }
+          } else {
+            console.error("CLUB MEMBERSHIPS LOAD ERROR:", membershipsResult.error);
+            setClubMembershipsAvailable(false);
+            setJoinedClubIds(getCachedJoinedClubIds(user.id));
+          }
         } else {
+          const memberships = ((membershipsResult.data || []) as ClubMemberRow[]);
+          const approvedMemberships = memberships.filter(
+            (membership) => (membership.status ?? "approved") === "approved"
+          );
+          const pendingMemberships = memberships.filter(
+            (membership) => membership.status === "pending"
+          );
+
           void mergeJoinedClubs(
             user.id,
             loadedClubs
               .filter((club) =>
-                ((membershipsResult.data || []) as ClubMemberRow[]).some(
+                approvedMemberships.some(
                   (membership) => membership.club_id === club.id
                 )
               )
@@ -232,10 +279,11 @@ export default function ClubsPage() {
               }))
           );
           setClubMembershipsAvailable(true);
+          setPendingClubIds(pendingMemberships.map((membership) => membership.club_id));
           setJoinedClubIds(
             mergeJoinedClubIds(
               user.id,
-              ((membershipsResult.data || []) as ClubMemberRow[]).map(
+              approvedMemberships.map(
               (membership) => membership.club_id
               )
             )
@@ -297,16 +345,45 @@ export default function ClubsPage() {
   const reloadJoinedClubIds = async (currentUserId: string) => {
     const { data, error: membershipsError } = await supabase
       .from("club_members")
-      .select("club_id")
-      .eq("user_id", currentUserId);
+      .select("club_id, status")
+      .eq("user_id", currentUserId)
+      .neq("status", "rejected");
 
     if (membershipsError) {
+      if (isMissingClubMemberStatus(membershipsError)) {
+        const { data: legacyData, error: legacyError } = await supabase
+          .from("club_members")
+          .select("club_id")
+          .eq("user_id", currentUserId);
+
+        if (legacyError) {
+          throw new Error(legacyError.message);
+        }
+
+        setPendingClubIds([]);
+        return mergeJoinedClubIds(
+          currentUserId,
+          ((legacyData || []) as ClubMemberRow[]).map(
+            (membership) => membership.club_id
+          )
+        );
+      }
+
       throw new Error(membershipsError.message);
     }
 
+    const memberships = ((data || []) as ClubMemberRow[]);
+    setPendingClubIds(
+      memberships
+        .filter((membership) => membership.status === "pending")
+        .map((membership) => membership.club_id)
+    );
+
     return mergeJoinedClubIds(
       currentUserId,
-      ((data || []) as ClubMemberRow[]).map(
+      memberships
+        .filter((membership) => (membership.status ?? "approved") === "approved")
+        .map(
         (membership) => membership.club_id
       )
     );
@@ -319,9 +396,9 @@ export default function ClubsPage() {
     setError("");
 
     try {
-      await joinClubMembership(clubId, userId);
+      const status = await joinClubMembership(clubId, userId);
       const joinedClub = clubs.find((club) => club.id === clubId);
-      if (joinedClub) {
+      if (joinedClub && status === "approved") {
         cacheJoinedClubSummary(userId, {
           id: joinedClub.id,
           name: joinedClub.name,
@@ -378,7 +455,7 @@ export default function ClubsPage() {
     <main className="min-h-screen bg-slate-50">
       <AppNavbar />
 
-      <section className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
+      <section className="mx-auto max-w-[1800px] px-4 py-6 sm:px-6 lg:px-8 xl:px-10 2xl:px-12">
         <div className="rounded-[30px] border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
             <div>
@@ -453,13 +530,13 @@ export default function ClubsPage() {
 
             {!clubMembershipsAvailable && (
               <div className="mb-4 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-700">
-                Club joining needs the club members database table to be created.
+                Club joining needs the club members database setup to be completed.
               </div>
             )}
 
             {filteredClubs.length > 0 ? (
-              <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_320px]">
-                <div className="grid gap-5 md:grid-cols-2">
+              <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_360px]">
+                <div className="grid gap-5 md:grid-cols-2 2xl:grid-cols-3">
                   {filteredClubs.map((club) => {
                     const logo = club.logo_url || club.image_url || "";
 
@@ -550,6 +627,17 @@ export default function ClubsPage() {
                               >
                                 {clubActionId === club.id ? "Leaving..." : "Leave club"}
                               </button>
+                            ) : pendingClubIds.includes(club.id) ? (
+                              <button
+                                type="button"
+                                onClick={() => handleLeaveClub(club.id)}
+                                disabled={clubActionId === club.id}
+                                className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm font-semibold text-amber-700 transition hover:bg-amber-100 disabled:cursor-not-allowed disabled:opacity-60"
+                              >
+                                {clubActionId === club.id
+                                  ? "Cancelling..."
+                                  : "Pending approval"}
+                              </button>
                             ) : (
                               <button
                                 type="button"
@@ -557,7 +645,7 @@ export default function ClubsPage() {
                                 disabled={clubActionId === club.id}
                                 className="rounded-lg bg-[#1e3a8a] px-3 py-2 text-sm font-semibold text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
                               >
-                                {clubActionId === club.id ? "Joining..." : "Join club"}
+                                {clubActionId === club.id ? "Requesting..." : "Request to join"}
                               </button>
                             )
                           )}

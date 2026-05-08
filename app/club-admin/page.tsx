@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { getClubAdminContext } from "../../lib/clubAdmin";
+import { inferEventCategory } from "../../lib/eventCategories";
 import { supabase } from "../../lib/supabase";
 
 type Stats = {
@@ -16,6 +17,7 @@ type RecentEvent = {
   id: string;
   title: string;
   category: string | null;
+  description: string | null;
   approval_status: string | null;
   event_date: string | null;
   club_id: string | null;
@@ -114,7 +116,7 @@ export default function ClubAdminDashboard() {
         const [eventsResult, memberCountsResult] = await Promise.all([
           supabase
             .from("events")
-            .select("id, title, category, approval_status, event_date, club_id")
+            .select("id, title, category, description, approval_status, event_date, club_id")
             .eq("club_id", managedClubData.id)
             .order("event_date", { ascending: false })
             .limit(100),
@@ -148,7 +150,7 @@ export default function ClubAdminDashboard() {
   }, []);
 
   return (
-    <div className="px-8 py-8">
+    <div className="px-6 py-8 lg:px-10 2xl:px-12">
       <div className="mb-8">
         <h1 className="text-2xl font-bold text-slate-900">Club Admin Dashboard</h1>
         <p className="mt-1 text-sm text-slate-500">
@@ -184,7 +186,7 @@ export default function ClubAdminDashboard() {
           ))}
         </div>
       ) : (
-        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
           <StatCard
             label="Club Events"
             value={stats.totalEvents}
@@ -222,7 +224,7 @@ export default function ClubAdminDashboard() {
         </div>
       )}
 
-      <div className="mt-8 grid gap-4 sm:grid-cols-2">
+      <div className="mt-8 grid gap-4 sm:grid-cols-2 2xl:grid-cols-4">
         <Link
           href="/club-admin/members"
           className="flex items-center gap-4 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm transition hover:border-[#1e3a8a] hover:shadow-md"
@@ -316,7 +318,11 @@ export default function ClubAdminDashboard() {
                         {event.title}
                       </td>
                       <td className="px-6 py-4 text-slate-500">
-                        {event.category ?? "—"}
+                        {inferEventCategory(
+                          event.category,
+                          event.title,
+                          event.description
+                        ) || "—"}
                       </td>
                       <td className="px-6 py-4 text-slate-500">
                         {event.event_date

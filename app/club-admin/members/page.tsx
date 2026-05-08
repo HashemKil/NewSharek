@@ -12,6 +12,7 @@ type ClubMember = {
   student_id: string | null;
   major: string | null;
   academic_year: string | null;
+  status: "pending" | "approved" | "rejected" | null;
   created_at: string | null;
 };
 
@@ -45,7 +46,7 @@ export default function ClubAdminMembersPage() {
       const { data, error: membersError } = await supabase
         .from("club_members")
         .select(
-          "id, user_id, full_name, email, student_id, major, academic_year, created_at"
+          "id, user_id, full_name, email, student_id, major, academic_year, status, created_at"
         )
         .eq("club_id", context.managedClub.id)
         .order("created_at", { ascending: true });
@@ -87,8 +88,44 @@ export default function ClubAdminMembersPage() {
     setActionLoading(null);
   };
 
+  const handleMemberStatus = async (
+    member: ClubMember,
+    status: "approved" | "rejected"
+  ) => {
+    if (!managedClub) return;
+
+    setActionLoading(member.id);
+    setError("");
+    setSuccess("");
+
+    const { error: updateError } = await supabase
+      .from("club_members")
+      .update({ status })
+      .eq("club_id", managedClub.id)
+      .eq("user_id", member.user_id);
+
+    if (updateError) {
+      setError(updateError.message);
+    } else {
+      setMembers((prev) =>
+        prev.map((item) =>
+          item.id === member.id ? { ...item, status } : item
+        )
+      );
+      setSuccess(status === "approved" ? "Member request approved." : "Member request rejected.");
+      setTimeout(() => setSuccess(""), 3000);
+    }
+
+    setActionLoading(null);
+  };
+
+  const approvedMembers = members.filter(
+    (member) => (member.status ?? "approved") === "approved"
+  );
+  const pendingMembers = members.filter((member) => member.status === "pending");
+
   return (
-    <div className="px-8 py-8">
+    <div className="px-6 py-8 lg:px-10 2xl:px-12">
       <div className="mb-6 flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
         <div>
           <h1 className="text-2xl font-bold text-slate-900">Club Members</h1>
@@ -121,7 +158,61 @@ export default function ClubAdminMembersPage() {
 
       <div className="mb-6 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
         <p className="text-sm font-medium text-slate-500">Total Members</p>
-        <p className="mt-2 text-3xl font-bold text-slate-900">{members.length}</p>
+        <p className="mt-2 text-3xl font-bold text-slate-900">{approvedMembers.length}</p>
+        <p className="mt-1 text-sm text-amber-600">
+          {pendingMembers.length} pending request{pendingMembers.length === 1 ? "" : "s"}
+        </p>
+      </div>
+
+      <div className="mb-6 rounded-2xl border border-amber-200 bg-white shadow-sm">
+        <div className="border-b border-amber-100 px-6 py-4">
+          <h2 className="text-base font-semibold text-slate-900">Join Requests</h2>
+          <p className="text-xs text-slate-400">
+            Approve students before they become official club members.
+          </p>
+        </div>
+
+        {loading ? (
+          <div className="p-6 text-sm text-slate-400">Loading requests...</div>
+        ) : pendingMembers.length === 0 ? (
+          <div className="px-6 py-10 text-center text-sm text-slate-400">
+            No pending join requests.
+          </div>
+        ) : (
+          <div className="divide-y divide-slate-100">
+            {pendingMembers.map((member) => (
+              <div
+                key={member.id}
+                className="flex flex-col gap-4 px-6 py-4 md:flex-row md:items-center md:justify-between"
+              >
+                <div>
+                  <p className="font-medium text-slate-800">
+                    {member.full_name || "Unknown student"}
+                  </p>
+                  <p className="text-xs text-slate-400">
+                    {member.email || "No email"} · {member.student_id || "No student ID"}
+                  </p>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    onClick={() => handleMemberStatus(member, "approved")}
+                    disabled={actionLoading === member.id}
+                    className="rounded-xl bg-[#1e3a8a] px-3 py-2 text-xs font-semibold text-white transition hover:opacity-90 disabled:opacity-50"
+                  >
+                    {actionLoading === member.id ? "Saving..." : "Approve"}
+                  </button>
+                  <button
+                    onClick={() => handleMemberStatus(member, "rejected")}
+                    disabled={actionLoading === member.id}
+                    className="rounded-xl border border-red-200 px-3 py-2 text-xs font-semibold text-red-600 transition hover:bg-red-50 disabled:opacity-50"
+                  >
+                    Reject
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       <div className="rounded-2xl border border-slate-200 bg-white shadow-sm">
@@ -138,7 +229,7 @@ export default function ClubAdminMembersPage() {
               <div key={index} className="h-16 animate-pulse rounded-xl bg-slate-100" />
             ))}
           </div>
-        ) : members.length === 0 ? (
+        ) : approvedMembers.length === 0 ? (
           <div className="px-6 py-16 text-center text-sm text-slate-400">
             No members found for this club.
           </div>
@@ -154,7 +245,7 @@ export default function ClubAdminMembersPage() {
                 </tr>
               </thead>
               <tbody>
-                {members.map((member) => {
+                {approvedMembers.map((member) => {
                   const isSelf = member.user_id === currentUserId;
 
                   return (

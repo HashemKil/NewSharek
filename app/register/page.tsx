@@ -1,5 +1,6 @@
-"use client";
+﻿"use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
@@ -27,6 +28,65 @@ export default function RegisterPage() {
 
   const validateStudentId = (value: string) => /^\d{8}$/.test(value);
   const validatePhoneNumber = (value: string) => /^\+?\d{7,15}$/.test(value);
+  const getEmailRedirectUrl = () => `${window.location.origin}/auth/callback`;
+  const normalizedPassword = password.toLowerCase();
+  const emailUsername = email.trim().toLowerCase().split("@")[0] || "";
+  const passwordRules = [
+    {
+      label: "At least 10 characters",
+      met: password.length >= 10,
+    },
+    {
+      label: "Uppercase and lowercase letters",
+      met: /[A-Z]/.test(password) && /[a-z]/.test(password),
+    },
+    {
+      label: "At least one number",
+      met: /\d/.test(password),
+    },
+    {
+      label: "At least one symbol",
+      met: /[^A-Za-z0-9\s]/.test(password),
+    },
+    {
+      label: "No spaces",
+      met: password.length > 0 && !/\s/.test(password),
+    },
+    {
+      label: "Does not include your name, email name, or student ID",
+      met:
+        password.length > 0 &&
+        ![firstName, lastName, emailUsername, studentId]
+          .map((value) => value.trim().toLowerCase())
+          .filter((value) => value.length >= 3)
+          .some((value) => normalizedPassword.includes(value)),
+    },
+  ];
+  const passwordScore = passwordRules.filter((rule) => rule.met).length;
+  const passwordStrengthLabel =
+    password.length === 0
+      ? "Not started"
+      : passwordScore <= 2
+        ? "Weak"
+        : passwordScore <= 4
+          ? "Medium"
+          : passwordScore === passwordRules.length
+            ? "Strong"
+            : "Good";
+  const passwordStrengthClass =
+    passwordScore <= 2
+      ? "bg-red-500"
+      : passwordScore <= 4
+        ? "bg-amber-500"
+        : "bg-emerald-500";
+  const passwordStrengthTextClass =
+    passwordScore <= 2
+      ? "text-red-600"
+      : passwordScore <= 4
+        ? "text-amber-700"
+        : "text-emerald-700";
+  const isStrongPassword =
+    password.length > 0 && passwordRules.every((rule) => rule.met);
 
   const handleRegister = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -75,8 +135,11 @@ export default function RegisterPage() {
       return;
     }
 
-    if (password.length < 6) {
-      setError("Password must be at least 6 characters.");
+    if (!isStrongPassword) {
+      const missingRules = passwordRules
+        .filter((rule) => !rule.met)
+        .map((rule) => rule.label.toLowerCase());
+      setError(`Password is too weak. It must have ${missingRules.join(", ")}.`);
       return;
     }
 
@@ -86,6 +149,17 @@ export default function RegisterPage() {
       const { data, error: signUpError } = await supabase.auth.signUp({
         email: cleanEmail,
         password,
+        options: {
+          emailRedirectTo: getEmailRedirectUrl(),
+          data: {
+            full_name: cleanName,
+            first_name: cleanFirstName,
+            last_name: cleanLastName,
+            phone_number: cleanPhoneNumber,
+            student_id: cleanStudentId,
+            major: cleanMajor,
+          },
+        },
       });
 
       if (signUpError) {
@@ -117,29 +191,37 @@ export default function RegisterPage() {
         portal_verified: false,
       };
 
-      let { error: profileError } = await supabase
-        .from("profiles")
-        .insert(profileInsert);
+      if (data.session) {
+        let { error: profileError } = await supabase
+          .from("profiles")
+          .upsert(profileInsert, { onConflict: "id" });
 
-      if (
-        profileError &&
-        profileError.message.toLowerCase().includes("phone_number")
-      ) {
-        const profileWithoutPhone: Partial<typeof profileInsert> = {
-          ...profileInsert,
-        };
-        delete profileWithoutPhone.phone_number;
-        const retry = await supabase.from("profiles").insert(profileWithoutPhone);
-        profileError = retry.error;
+        if (
+          profileError &&
+          profileError.message.toLowerCase().includes("phone_number")
+        ) {
+          const profileWithoutPhone: Partial<typeof profileInsert> = {
+            ...profileInsert,
+          };
+          delete profileWithoutPhone.phone_number;
+          const retry = await supabase
+            .from("profiles")
+            .upsert(profileWithoutPhone, { onConflict: "id" });
+          profileError = retry.error;
+        }
+
+        if (profileError) {
+          console.error("Profile insert error:", profileError);
+          setError(profileError.message);
+          return;
+        }
+
+        await supabase.auth.signOut();
       }
 
-      if (profileError) {
-        console.error("Profile insert error:", profileError);
-        setError(profileError.message);
-        return;
-      }
-
-      setSuccess("Account created successfully. Please check your email, then sign in.");
+      setSuccess(
+        "Account created. We sent a verification email to your university email. Verify it before signing in."
+      );
 
       setFirstName("");
       setLastName("");
@@ -151,8 +233,8 @@ export default function RegisterPage() {
       setConfirmPassword("");
 
       setTimeout(() => {
-        router.push("/login");
-      }, 1500);
+        router.push("/login?checkEmail=1");
+      }, 1800);
     } catch (err) {
       console.error("Registration error:", err);
       setError("Something went wrong. Please try again.");
@@ -168,7 +250,14 @@ export default function RegisterPage() {
     <main className="min-h-screen bg-[#f2f4f7] flex flex-col">
       <header className="bg-white border-b">
         <div className="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between">
-          <div className="text-xl font-semibold text-[#1e3a8a]">Sharek</div>
+          <Image
+            src="/brand/sharek-logo-cropped.png"
+            alt="Sharek"
+            width={190}
+            height={72}
+            priority
+            className="h-12 w-auto object-contain"
+          />
           <div className="text-sm text-gray-600">PSUT Collaboration Platform</div>
         </div>
       </header>
@@ -281,18 +370,62 @@ export default function RegisterPage() {
 
             <input
               type="password"
-              placeholder="Password (min. 6 characters)"
+              placeholder="Password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
+              minLength={10}
+              autoComplete="new-password"
               required
               className={inputClass}
             />
+
+            <div className="rounded-xl border border-gray-200 bg-slate-50 p-4">
+              <div className="flex items-center justify-between gap-3">
+                <p className="text-sm font-semibold text-gray-800">
+                  Password strength
+                </p>
+                <p className={`text-sm font-semibold ${passwordStrengthTextClass}`}>
+                  {passwordStrengthLabel}
+                </p>
+              </div>
+              <div className="mt-3 h-2 overflow-hidden rounded-full bg-gray-200">
+                <div
+                  className={`h-full rounded-full transition-all ${passwordStrengthClass}`}
+                  style={{
+                    width: `${Math.max(8, (passwordScore / passwordRules.length) * 100)}%`,
+                  }}
+                />
+              </div>
+              <div className="mt-4 grid gap-2 sm:grid-cols-2">
+                {passwordRules.map((rule) => (
+                  <div
+                    key={rule.label}
+                    className={`flex items-center gap-2 text-xs ${
+                      rule.met ? "text-emerald-700" : "text-gray-500"
+                    }`}
+                  >
+                    <span
+                      className={`flex h-4 w-4 items-center justify-center rounded-full text-[10px] font-bold ${
+                        rule.met
+                          ? "bg-emerald-100 text-emerald-700"
+                          : "bg-gray-200 text-gray-500"
+                      }`}
+                    >
+                      {rule.met ? "OK" : ""}
+                    </span>
+                    <span>{rule.label}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
 
             <input
               type="password"
               placeholder="Confirm Password"
               value={confirmPassword}
               onChange={(e) => setConfirmPassword(e.target.value)}
+              minLength={10}
+              autoComplete="new-password"
               required
               className={inputClass}
             />
@@ -317,3 +450,4 @@ export default function RegisterPage() {
     </main>
   );
 }
+

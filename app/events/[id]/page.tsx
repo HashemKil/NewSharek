@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import AppNavbar from "../../../components/AppNavbar";
+import { inferEventCategory } from "../../../lib/eventCategories";
 import { supabase } from "../../../lib/supabase";
 
 type EventRow = {
@@ -11,11 +12,15 @@ type EventRow = {
   title: string | null;
   description: string | null;
   category: string | null;
+  prize?: string | null;
   event_date?: string | null;
+  end_date?: string | null;
+  registration_deadline?: string | null;
   date?: string | null;
   start_time?: string | null;
   end_time?: string | null;
   location?: string | null;
+  location_details?: string | null;
   source_url?: string | null;
   image_url?: string | null;
   poster_url?: string | null;
@@ -56,6 +61,7 @@ type Team = {
   description: string | null;
   needed_skills: string | null;
   max_members: number | null;
+  status?: string | null;
   owner_id: string | null;
   is_open_to_members?: boolean | null;
 };
@@ -76,6 +82,15 @@ type TeamWithMembers = Team & {
   currentUserMemberStatus: string | null;
 };
 
+type PendingExternalJoin = {
+  eventId: string;
+  title: string;
+  url: string;
+  openedAt: number;
+};
+
+const EXTERNAL_JOIN_STORAGE_KEY = "sharek:pendingExternalEventJoin";
+
 const inputClass =
   "w-full rounded-lg border border-slate-300 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-[#1e3a8a] focus:ring-2 focus:ring-[#1e3a8a]/10";
 
@@ -88,6 +103,23 @@ const getEventImageUrl = (event: EventRow | null) =>
   event?.banner_url?.trim() ||
   event?.thumbnail_url?.trim() ||
   null;
+
+const isOnlineLocation = (location?: string | null) =>
+  !location || /\bonline\b|virtual|remote/i.test(location);
+
+const getMapEmbedUrl = (location?: string | null) => {
+  if (isOnlineLocation(location)) return "";
+  return `https://www.google.com/maps?q=${encodeURIComponent(
+    `${location}, Jordan`
+  )}&output=embed`;
+};
+
+const getMapLink = (location?: string | null) => {
+  if (isOnlineLocation(location)) return "";
+  return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
+    `${location}, Jordan`
+  )}`;
+};
 
 export default function EventDetailsPage() {
   const params = useParams();
@@ -105,8 +137,13 @@ export default function EventDetailsPage() {
   const [currentEventTeamName, setCurrentEventTeamName] = useState("");
   const [statusClock, setStatusClock] = useState(0);
   const [isRegistered, setIsRegistered] = useState(false);
+  const [registrationStatus, setRegistrationStatus] = useState<
+    "pending" | "approved" | "rejected" | null
+  >(null);
   const [isResponsibleClubMember, setIsResponsibleClubMember] = useState(false);
   const [responsibleClub, setResponsibleClub] = useState<ClubRow | null>(null);
+  const [pendingExternalJoin, setPendingExternalJoin] =
+    useState<PendingExternalJoin | null>(null);
 
   const [teamName, setTeamName] = useState("");
   const [teamDescription, setTeamDescription] = useState("");
@@ -116,12 +153,22 @@ export default function EventDetailsPage() {
   const [maxMembers, setMaxMembers] = useState(String(TEAM_MEMBER_LIMIT));
 
   const eventDate = event?.event_date ?? event?.date ?? null;
+  const eventEndDate = event?.end_date ?? eventDate;
+  const registrationDeadline = event?.registration_deadline ?? null;
   const eventImageUrl = getEventImageUrl(event);
+  const mapEmbedUrl = getMapEmbedUrl(event?.location);
+  const mapLink = getMapLink(event?.location);
   const isTeamBased = Boolean(event?.is_team_based);
+  const usesExternalRegistration = Boolean(event?.source_url) && !event?.is_university_event;
   const isClubMembersOnly = Boolean(event?.is_club_members_only);
   const isLockedClubEvent =
     isClubMembersOnly && Boolean(event?.club_id) && !isResponsibleClubMember;
   const eventTypeLabel = isTeamBased ? "Team based" : "Solo based";
+  const eventCategoryLabel = inferEventCategory(
+    event?.category,
+    event?.title,
+    event?.description
+  );
   const responsibleClubName =
     responsibleClub?.name?.trim() ||
     responsibleClub?.title?.trim() ||
@@ -171,12 +218,13 @@ export default function EventDetailsPage() {
 
   const computeStatus = useCallback((
     date: string | null,
+    endDate: string | null,
     start: string | null,
     end: string | null
   ): EventStatus => {
     const now = new Date();
     const startsAt = parseEventDateTime(date, start, "start");
-    const endsAt = parseEventDateTime(date, end, "end");
+    const endsAt = parseEventDateTime(endDate || date, end, "end");
 
     if (!startsAt || !endsAt) return "upcoming";
 
@@ -193,9 +241,17 @@ export default function EventDetailsPage() {
 
   const eventStatus = useMemo(() => {
     void statusClock;
-    return computeStatus(eventDate, event?.start_time ?? null, event?.end_time ?? null);
-  }, [computeStatus, eventDate, event?.end_time, event?.start_time, statusClock]);
+    return computeStatus(
+      eventDate,
+      eventEndDate,
+      event?.start_time ?? null,
+      event?.end_time ?? null
+    );
+  }, [computeStatus, eventDate, eventEndDate, event?.end_time, event?.start_time, statusClock]);
   const isCompleted = eventStatus === "completed";
+  const isRegistrationClosed = registrationDeadline
+    ? new Date(registrationDeadline) < new Date()
+    : false;
 
   const formatDate = (value: string | null) => {
     if (!value) return "Date not set";
@@ -206,6 +262,25 @@ export default function EventDetailsPage() {
       day: "2-digit",
       month: "short",
       year: "numeric",
+    });
+  };
+
+  const formatDateRange = (start: string | null, end: string | null) => {
+    if (!end || end === start) return formatDate(start);
+    return `${formatDate(start)} - ${formatDate(end)}`;
+  };
+
+  const formatDateTime = (value: string | null) => {
+    if (!value) return "No deadline";
+    const parsed = new Date(value);
+    if (Number.isNaN(parsed.getTime())) return value;
+
+    return parsed.toLocaleString("en-GB", {
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
     });
   };
 
@@ -273,6 +348,11 @@ export default function EventDetailsPage() {
       }
 
       const loadedEvent = eventResult.data as EventRow;
+      if ((loadedEvent.approval_status ?? "approved") !== "approved") {
+        setError("This event is still pending review.");
+        return;
+      }
+
       setEvent(loadedEvent);
 
       if (loadedEvent.is_university_event && loadedEvent.club_id) {
@@ -293,6 +373,7 @@ export default function EventDetailsPage() {
           .select("club_id")
           .eq("club_id", loadedEvent.club_id)
           .eq("user_id", user.id)
+          .eq("status", "approved")
           .maybeSingle();
 
         setIsResponsibleClubMember(Boolean(clubMembership));
@@ -300,13 +381,29 @@ export default function EventDetailsPage() {
         setIsResponsibleClubMember(false);
       }
 
-      const { data: registrationData } = await supabase
+      const { data: registrationData, error: registrationStatusError } = await supabase
         .from("event_registrations")
-        .select("id")
+        .select("id, status")
         .eq("event_id", loadedEvent.id)
         .eq("user_id", user.id)
         .maybeSingle();
-      setIsRegistered(Boolean(registrationData));
+      const legacyRegistrationResult = registrationStatusError
+        ? await supabase
+            .from("event_registrations")
+            .select("id")
+            .eq("event_id", loadedEvent.id)
+            .eq("user_id", user.id)
+            .maybeSingle()
+        : null;
+      const rawRegistration = registrationData ?? legacyRegistrationResult?.data;
+      const status =
+        rawRegistration && "status" in rawRegistration
+          ? (rawRegistration.status as "pending" | "approved" | "rejected" | null)
+          : rawRegistration
+          ? "approved"
+          : null;
+      setRegistrationStatus(status);
+      setIsRegistered(status === "approved");
 
       const title = loadedEvent.title ?? "";
       const { data: teamData, error: teamError } = await supabase
@@ -321,7 +418,10 @@ export default function EventDetailsPage() {
 
       const eventTeams = (teamData || []) as Team[];
       const rawTeams = eventTeams.filter(
-        (team) => team.is_open_to_members !== false
+        (team) =>
+          team.is_open_to_members !== false &&
+          ((team.status ?? "approved") === "approved" ||
+            team.owner_id === user.id)
       );
       let memberRows: TeamMember[] = [];
 
@@ -406,25 +506,50 @@ export default function EventDetailsPage() {
       return false;
     }
 
+    if (isRegistrationClosed) {
+      setError("The registration deadline has passed.");
+      return false;
+    }
+
     if (isLockedClubEvent) {
       setError("Only members of this club can join this event.");
       return false;
     }
 
-    const { error: registrationError } = await supabase
+    const needsClubAdminApproval = Boolean(event.club_id);
+    const registrationPayload = {
+      event_id: event.id,
+      user_id: profile.id,
+      full_name: profile.full_name,
+      email: profile.email,
+      student_id: profile.student_id,
+      major: profile.major,
+      academic_year: profile.academic_year,
+      status: needsClubAdminApproval ? "pending" : "approved",
+    };
+
+    let { error: registrationError } = await supabase
       .from("event_registrations")
       .upsert(
-        {
-          event_id: event.id,
-          user_id: profile.id,
-          full_name: profile.full_name,
-          email: profile.email,
-          student_id: profile.student_id,
-          major: profile.major,
-          academic_year: profile.academic_year,
-        },
+        registrationPayload,
         { onConflict: "event_id,user_id" }
-      );
+    );
+
+    if (registrationError?.code === "PGRST204") {
+      const legacyPayload = {
+        event_id: registrationPayload.event_id,
+        user_id: registrationPayload.user_id,
+        full_name: registrationPayload.full_name,
+        email: registrationPayload.email,
+        student_id: registrationPayload.student_id,
+        major: registrationPayload.major,
+        academic_year: registrationPayload.academic_year,
+      };
+      const retry = await supabase
+        .from("event_registrations")
+        .upsert(legacyPayload, { onConflict: "event_id,user_id" });
+      registrationError = retry.error;
+    }
 
     if (registrationError) {
       setError(
@@ -445,12 +570,115 @@ export default function EventDetailsPage() {
       const registered = await registerForEvent();
       if (!registered) return;
 
-      setSuccess("You are registered for this event.");
-      setIsRegistered(true);
+      const needsApproval = Boolean(event?.club_id);
+      setSuccess(
+        needsApproval
+          ? "Request sent. The club admin can approve or reject it."
+          : "You are registered for this event."
+      );
+      setRegistrationStatus(needsApproval ? "pending" : "approved");
+      setIsRegistered(!needsApproval);
       await loadDetails();
     } finally {
       setSaving(false);
     }
+  };
+
+  const markExternalEventJoined = useCallback(async () => {
+    if (!event || !profile) return false;
+
+    const { error: registrationError } = await supabase
+      .from("event_registrations")
+      .upsert(
+        {
+          event_id: event.id,
+          user_id: profile.id,
+          full_name: profile.full_name,
+          email: profile.email,
+          student_id: profile.student_id,
+          major: profile.major,
+          academic_year: profile.academic_year,
+          status: "approved",
+        },
+        { onConflict: "event_id,user_id" }
+      );
+
+    if (registrationError) {
+      setError(registrationError.message);
+      return false;
+    }
+
+    setRegistrationStatus("approved");
+    setIsRegistered(true);
+    setSuccess(isTeamBased ? "Marked as joined as group." : "Marked as joined.");
+    return true;
+  }, [event, isTeamBased, profile]);
+
+  const askAboutExternalRegistration = useCallback(async () => {
+    if (!event) return;
+
+    const raw = window.localStorage.getItem(EXTERNAL_JOIN_STORAGE_KEY);
+    if (!raw) return;
+
+    let pending: PendingExternalJoin | null = null;
+    try {
+      pending = JSON.parse(raw) as PendingExternalJoin;
+    } catch {
+      window.localStorage.removeItem(EXTERNAL_JOIN_STORAGE_KEY);
+      return;
+    }
+
+    if (pending?.eventId !== event.id) return;
+    if (Date.now() - (pending.openedAt ?? 0) < 1500) return;
+
+    setPendingExternalJoin(pending);
+  }, [event]);
+
+  const confirmExternalRegistration = async (completed: boolean) => {
+    window.localStorage.removeItem(EXTERNAL_JOIN_STORAGE_KEY);
+    setPendingExternalJoin(null);
+
+    if (completed) {
+      await markExternalEventJoined();
+    } else {
+      setSuccess("No problem. The event was not marked as joined.");
+    }
+  };
+
+  useEffect(() => {
+    const handleReturn = () => {
+      if (document.visibilityState === "visible") {
+        void askAboutExternalRegistration();
+      }
+    };
+
+    window.addEventListener("focus", handleReturn);
+    document.addEventListener("visibilitychange", handleReturn);
+
+    return () => {
+      window.removeEventListener("focus", handleReturn);
+      document.removeEventListener("visibilitychange", handleReturn);
+    };
+  }, [askAboutExternalRegistration]);
+
+  const handleExternalJoinEvent = () => {
+    if (!event?.source_url) {
+      setError("This event does not have an external registration link yet.");
+      return;
+    }
+
+    setError("");
+    setSuccess("Register on the external site, then come back to Sharek.");
+    window.localStorage.setItem(
+      EXTERNAL_JOIN_STORAGE_KEY,
+      JSON.stringify({
+        eventId: event.id,
+        title: event.title || "this event",
+        url: event.source_url,
+        openedAt: Date.now(),
+      } satisfies PendingExternalJoin)
+    );
+    window.open(event.source_url, "_blank", "noopener,noreferrer");
   };
 
   const handleLeaveEvent = async () => {
@@ -481,6 +709,7 @@ export default function EventDetailsPage() {
       }
 
       setIsRegistered(false);
+      setRegistrationStatus(null);
       setSuccess("You left this event.");
       await loadDetails();
     } finally {
@@ -685,6 +914,7 @@ export default function EventDetailsPage() {
           needed_skills: cleanNeededSkills || null,
           is_open_to_members: isOpenToMembers,
           max_members: selectedMaxMembers,
+          status: "pending",
           owner_id: profile.id,
         })
         .select()
@@ -722,8 +952,8 @@ export default function EventDetailsPage() {
       const addedCount = memberRows.length;
       setSuccess(
         addedCount === 1
-          ? "Team created and you were added as the owner."
-          : `Team created. Invites were sent to ${addedCount - 1} student(s). You are the owner.`
+          ? "Team created and sent for admin approval."
+          : `Team created and sent for admin approval. Invites were sent to ${addedCount - 1} student(s).`
       );
       setTeamName("");
       setTeamDescription("");
@@ -775,12 +1005,12 @@ export default function EventDetailsPage() {
                   <img
                     src={eventImageUrl}
                     alt={event.title || "Event image"}
-                    className="mb-6 h-80 w-full rounded-lg object-cover"
+                    className="mb-6 h-auto max-h-[720px] w-full rounded-lg object-contain"
                   />
                 )}
                 <div className="flex flex-wrap items-center gap-2">
                   <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700">
-                    {event.category || "Event"}
+                    {eventCategoryLabel}
                   </span>
                   <span className={eventTypeBadgeClass}>
                     {eventTypeLabel}
@@ -793,6 +1023,11 @@ export default function EventDetailsPage() {
                   {isClubMembersOnly && (
                     <span className="rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-700">
                       Club members only
+                    </span>
+                  )}
+                  {event.prize && (
+                    <span className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700">
+                      Prize: {event.prize}
                     </span>
                   )}
                   <span
@@ -818,7 +1053,7 @@ export default function EventDetailsPage() {
                       Date
                     </p>
                     <p className="mt-1 font-medium text-slate-800">
-                      {formatDate(eventDate)}
+                      {formatDateRange(eventDate, eventEndDate)}
                     </p>
                   </div>
                   <div className="rounded-lg bg-slate-50 p-4">
@@ -829,12 +1064,30 @@ export default function EventDetailsPage() {
                   </div>
                   <div className="rounded-lg bg-slate-50 p-4">
                     <p className="text-xs font-semibold uppercase text-slate-400">
+                      Register By
+                    </p>
+                    <p className="mt-1 font-medium text-slate-800">
+                      {formatDateTime(registrationDeadline)}
+                    </p>
+                  </div>
+                  <div className="rounded-lg bg-slate-50 p-4">
+                    <p className="text-xs font-semibold uppercase text-slate-400">
                       Location
                     </p>
                     <p className="mt-1 font-medium text-slate-800">
                       {event.location || "TBA"}
                     </p>
                   </div>
+                  {event.location_details && (
+                    <div className="rounded-lg bg-slate-50 p-4">
+                      <p className="text-xs font-semibold uppercase text-slate-400">
+                        Location Details
+                      </p>
+                      <p className="mt-1 whitespace-pre-wrap font-medium text-slate-800">
+                        {event.location_details}
+                      </p>
+                    </div>
+                  )}
                   <div className="rounded-lg bg-slate-50 p-4">
                     <p className="text-xs font-semibold uppercase text-slate-400">
                       Registration
@@ -844,6 +1097,16 @@ export default function EventDetailsPage() {
                       {event.max_capacity ? ` / ${event.max_capacity}` : ""}
                     </p>
                   </div>
+                  {event.prize && (
+                    <div className="rounded-lg bg-emerald-50 p-4">
+                      <p className="text-xs font-semibold uppercase text-emerald-500">
+                        Prize
+                      </p>
+                      <p className="mt-1 font-medium text-emerald-800">
+                        {event.prize}
+                      </p>
+                    </div>
+                  )}
                   {event.is_university_event && responsibleClub && (
                     <div className="rounded-lg bg-slate-50 p-4">
                       <p className="text-xs font-semibold uppercase text-slate-400">
@@ -855,6 +1118,47 @@ export default function EventDetailsPage() {
                     </div>
                   )}
                 </div>
+
+                {(event.location || event.location_details) && (
+                  <div className="mt-6 rounded-lg border border-slate-200 bg-white p-4">
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                      <div>
+                        <p className="text-xs font-semibold uppercase text-slate-400">
+                          Event Location
+                        </p>
+                        <p className="mt-1 font-semibold text-slate-900">
+                          {event.location || "TBA"}
+                        </p>
+                        {event.location_details && (
+                          <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-slate-600">
+                            {event.location_details}
+                          </p>
+                        )}
+                      </div>
+
+                      {mapLink && (
+                        <a
+                          href={mapLink}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="inline-flex rounded-lg border border-slate-200 px-4 py-2 text-sm font-semibold text-[#1e3a8a] transition hover:bg-slate-50"
+                        >
+                          Open in Maps
+                        </a>
+                      )}
+                    </div>
+
+                    {mapEmbedUrl && (
+                      <iframe
+                        title="Event location map"
+                        src={mapEmbedUrl}
+                        loading="lazy"
+                        referrerPolicy="no-referrer-when-downgrade"
+                        className="mt-4 h-72 w-full rounded-lg border border-slate-200"
+                      />
+                    )}
+                  </div>
+                )}
 
                 {event.source_url && (
                   <a
@@ -868,7 +1172,7 @@ export default function EventDetailsPage() {
                 )}
               </article>
 
-              {isTeamBased ? (
+              {isTeamBased && !usesExternalRegistration ? (
                 <section className="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
                   <h2 className="text-xl font-bold text-slate-950">
                     Available teams
@@ -879,6 +1183,11 @@ export default function EventDetailsPage() {
                   {isCompleted && (
                     <p className="mt-3 rounded-lg bg-slate-100 px-4 py-3 text-sm font-medium text-slate-600">
                       This event is completed. Team requests are closed.
+                    </p>
+                  )}
+                  {isRegistrationClosed && !isCompleted && (
+                    <p className="mt-3 rounded-lg bg-red-50 px-4 py-3 text-sm font-medium text-red-600">
+                      Registration closed on {formatDateTime(registrationDeadline)}.
                     </p>
                   )}
                   {isLockedClubEvent && (
@@ -912,6 +1221,11 @@ export default function EventDetailsPage() {
                               {team.memberCount} / {TEAM_MEMBER_LIMIT} members
                             </p>
                           </div>
+                          {team.status === "pending" && team.owner_id === profile?.id && (
+                            <span className="rounded-full border border-amber-200 bg-amber-50 px-2 py-1 text-xs font-semibold text-amber-700">
+                              Pending approval
+                            </span>
+                          )}
                           {team.hasRequested && (
                             <span className="rounded-full border border-sky-200 bg-sky-50 px-2 py-1 text-xs font-semibold text-sky-700">
                               Requested
@@ -933,33 +1247,65 @@ export default function EventDetailsPage() {
               ) : (
                 <section className="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
                   <h2 className="text-xl font-bold text-slate-950">
-                    {isRegistered ? "You are registered" : "Join this event"}
+                    {registrationStatus === "pending"
+                      ? "Request pending"
+                      : isRegistered
+                      ? isTeamBased
+                        ? "You joined as a group"
+                        : "You are registered"
+                      : "Join this event"}
                   </h2>
                   <p className="mt-2 text-sm leading-6 text-slate-500">
                     {isLockedClubEvent
                       ? "You need to join the responsible club before registering for this event."
+                      : usesExternalRegistration && !isRegistered
+                      ? "This event uses an external registration site. Sharek will ask you to confirm after you come back."
+                      : registrationStatus === "pending"
+                      ? "Your request is waiting for the club admin to approve it."
+                      : registrationStatus === "rejected"
+                      ? "Your previous request was rejected. You can send another request if registration is still open."
                       : isRegistered
                       ? "You can leave this event if you no longer want to participate."
                       : "Your name, email, student ID, major, and academic year will be copied from your profile into the event registration."}
                   </p>
                   <button
                     type="button"
-                    onClick={isRegistered ? handleLeaveEvent : handleJoinEvent}
-                    disabled={saving || isCompleted || isLockedClubEvent}
+                    onClick={
+                      isRegistered || registrationStatus === "pending"
+                        ? handleLeaveEvent
+                        : usesExternalRegistration
+                        ? handleExternalJoinEvent
+                        : handleJoinEvent
+                    }
+                    disabled={saving || isCompleted || isRegistrationClosed || isLockedClubEvent}
                     className={`mt-5 rounded-lg px-5 py-3 text-sm font-semibold text-white hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60 ${
-                      isRegistered ? "bg-red-600" : "bg-[#1e3a8a]"
+                      isRegistered || registrationStatus === "pending"
+                        ? "bg-red-600"
+                        : "bg-[#1e3a8a]"
                     }`}
                   >
                     {isCompleted
                       ? "Completed"
+                      : isRegistrationClosed
+                      ? "Registration closed"
                       : isLockedClubEvent
                       ? "Club members only"
                       : saving
                       ? isRegistered
                         ? "Leaving..."
+                        : registrationStatus === "pending"
+                        ? "Cancelling..."
                         : "Joining..."
+                      : registrationStatus === "pending"
+                      ? "Cancel request"
                       : isRegistered
-                      ? "Leave event"
+                      ? isTeamBased
+                        ? "Leave group event"
+                        : "Leave event"
+                      : usesExternalRegistration
+                      ? "Open registration link"
+                      : event.club_id
+                      ? "Request to join"
                       : "Join event"}
                   </button>
                 </section>
@@ -1048,12 +1394,15 @@ export default function EventDetailsPage() {
                         selectedTeam.currentUserMemberStatus !== "pending") ||
                       selectedTeam.memberCount >= TEAM_MEMBER_LIMIT ||
                       isCompleted ||
+                      isRegistrationClosed ||
                       isLockedClubEvent
                     }
                     className="mt-5 w-full rounded-lg bg-[#1e3a8a] px-5 py-3 text-sm font-semibold text-white hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
                   >
                     {isCompleted
                       ? "Completed"
+                      : isRegistrationClosed
+                      ? "Registration closed"
                       : isLockedClubEvent
                       ? "Club members only"
                       : selectedTeam.currentUserMemberStatus === "pending"
@@ -1180,12 +1529,15 @@ export default function EventDetailsPage() {
                       saving ||
                       Boolean(currentEventTeamName) ||
                       isCompleted ||
+                      isRegistrationClosed ||
                       isLockedClubEvent
                     }
                     className="mt-4 w-full rounded-lg bg-[#1e3a8a] px-5 py-3 text-sm font-semibold text-white hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
                   >
                     {isCompleted
                       ? "Completed"
+                      : isRegistrationClosed
+                      ? "Registration closed"
                       : isLockedClubEvent
                       ? "Club members only"
                       : currentEventTeamName
@@ -1200,6 +1552,42 @@ export default function EventDetailsPage() {
           </div>
         )}
       </section>
+      {pendingExternalJoin && (
+        <div className="fixed inset-0 z-[80] flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-slate-950/40 backdrop-blur-sm" />
+          <div className="relative w-full max-w-md rounded-3xl border border-slate-200 bg-white p-6 shadow-2xl">
+            <p className="text-xs font-semibold uppercase tracking-wide text-[#1e3a8a]">
+              External registration
+            </p>
+            <h2 className="mt-2 text-xl font-bold text-slate-900">
+              Did you register?
+            </h2>
+            <p className="mt-3 text-sm leading-6 text-slate-500">
+              Did you finish registering for{" "}
+              <span className="font-semibold text-slate-700">
+                {pendingExternalJoin.title}
+              </span>{" "}
+              on the external event website?
+            </p>
+            <div className="mt-6 flex justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => confirmExternalRegistration(false)}
+                className="rounded-xl border border-slate-200 px-5 py-2.5 text-sm font-semibold text-slate-600 transition hover:bg-slate-50"
+              >
+                No
+              </button>
+              <button
+                type="button"
+                onClick={() => confirmExternalRegistration(true)}
+                className="rounded-xl bg-[#1e3a8a] px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-[#1e40af]"
+              >
+                Yes
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </main>
   );
 }
