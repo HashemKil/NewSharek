@@ -12,6 +12,8 @@ type ProfileReminder = {
 
 const isBlank = (value: string | null | undefined) => !value?.trim();
 
+// The navbar owns the profile reminder because it is shared across every
+// signed-in page and should stay consistent as students move around the app.
 const getMissingProfileFields = (profile: {
   full_name?: string | null;
   phone_number?: string | null;
@@ -44,7 +46,7 @@ export default function AppNavbar() {
   const [profileReminder, setProfileReminder] =
     useState<ProfileReminder | null>(null);
 
-  // On mount, check if the logged-in user is an admin
+  // Load the current user's navigation permissions and profile reminder state.
   useEffect(() => {
     const checkAdmin = async () => {
       const {

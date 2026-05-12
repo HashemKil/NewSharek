@@ -9,7 +9,7 @@ import {
 import { supabase } from "../../../lib/supabase";
 import { formatTagLabel } from "../../../lib/tagLabels";
 
-// â”€â”€â”€ Types â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// Admin event data shapes shared across cards, modals, and scraper imports.
 
 type AdminEvent = {
   id: string;
@@ -116,7 +116,7 @@ const readImageFile = (file: File) =>
     reader.readAsDataURL(file);
   });
 
-// â”€â”€â”€ Devpost fetcher â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// Devpost date ranges are free text, so parse them defensively and keep only open opportunities.
 
 function parseDevpostDateRange(value: unknown) {
   if (typeof value !== "string" || !value.trim()) {
@@ -292,6 +292,7 @@ function getDuplicateEventKey(event: AdminEvent) {
   return `${normalizeDuplicateText(event.title)}|${dateKey}`;
 }
 
+// Scrapers and manual imports can point to the same event; keep the richest copy.
 function dedupeEvents<T extends AdminEvent>(items: T[]) {
   const byKey = new Map<string, T>();
   for (const item of items) {
@@ -335,7 +336,7 @@ function toDateTimeInput(value: string | null) {
   return value.slice(0, 16);
 }
 
-// â”€â”€â”€ Small shared components â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// Shared presentation helpers keep repeated admin cards and modals consistent.
 
 function StatusBadge({ status }: { status: string }) {
   const s = STATUS_STYLES[status] ?? {
@@ -403,7 +404,7 @@ function EmptyState({
   );
 }
 
-// â”€â”€â”€ Pending Event Card (scraper side â€” editable) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// Pending cards represent scraper imports or club submissions that still need admin review.
 
 function PendingCard({
   event,
@@ -510,7 +511,7 @@ function PendingCard({
   );
 }
 
-// â”€â”€â”€ Active Event Card (approved/live side â€” read-only) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// Active cards cover both available and finished events in the admin workspace.
 
 function ActiveCard({
   event,
@@ -607,7 +608,7 @@ function ActiveCard({
   );
 }
 
-// â”€â”€â”€ Pending Event Modal (edit + approve/deny) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// Admins clean imported or club-submitted events here before approving or rejecting them.
 
 function PendingModal({
   event,
@@ -675,7 +676,7 @@ function PendingModal({
     }
 
     if (isMock) {
-      // Devpost event â€” INSERT as pending into DB
+      // Imported Devpost events are saved as pending so admins can review them first.
       setSaving(true); setSaveError(""); setSaveSuccess("");
       const { data, error } = await supabase.from("events").insert({
         title: edit.title, description: edit.description || null,
@@ -1097,7 +1098,7 @@ function PendingModal({
   );
 }
 
-// â”€â”€â”€ Active Event Modal (read + edit + registrations + teams) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// Create modal uses the same fields as edit modals so every event source stays compatible.
 
 function CreateEventModal({
   onClose,
@@ -1988,7 +1989,7 @@ function ActiveModal({
 
       {/* Tab body */}
       <div className="flex-1 overflow-y-auto">
-        {/* â”€â”€ Event Info â”€â”€ */}
+        {/* Event info */}
         {activeTab === "details" && (
           <div className="flex flex-col gap-5 p-6">
             <InfoRow icon={<CalendarIcon />} label="Date" value={formatDate(event.event_date)} />
@@ -2034,7 +2035,7 @@ function ActiveModal({
           </div>
         )}
 
-        {/* â”€â”€ Edit â”€â”€ */}
+        {/* Edit */}
         {activeTab === "edit" && (
           <div className="flex flex-col gap-5 p-6">
             {saveError && <AlertBox type="error">{saveError}</AlertBox>}
@@ -2188,7 +2189,7 @@ function ActiveModal({
           </div>
         )}
 
-        {/* â”€â”€ Registrations â”€â”€ */}
+        {/* Registrations */}
         {activeTab === "registrations" && (
           <div className="p-6">
             <p className="mb-4 text-sm text-slate-500">
@@ -2234,7 +2235,7 @@ function ActiveModal({
           </div>
         )}
 
-        {/* â”€â”€ Teams â”€â”€ */}
+        {/* Teams */}
         {activeTab === "teams" && (
           <div className="p-6">
             {event.is_team_based && (
@@ -2382,7 +2383,7 @@ function ActiveModal({
   );
 }
 
-// â”€â”€â”€ Shared modal shell â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// Shared modal shell keeps the overlay, sizing, and close behavior consistent.
 
 function ModalShell({
   children,
@@ -2404,7 +2405,7 @@ function ModalShell({
   );
 }
 
-// â”€â”€â”€ Mini helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// Mini helpers for small formatting and repeated form controls.
 
 function InfoRow({ icon, label, value }: { icon: React.ReactNode; label: string; value: string }) {
   return (
@@ -2435,7 +2436,7 @@ function LoadingSkeleton({ rows = 4, height = "h-14" }: { rows?: number; height?
   );
 }
 
-// â”€â”€â”€ SVG Icons â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// Inline SVG icons used by this page.
 
 function CalendarIcon() {
   return (
@@ -2504,7 +2505,7 @@ function PeopleIcon() {
   );
 }
 
-// â”€â”€â”€ API Sources Panel â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// API sources panel documents which scrapers can add pending review cards.
 
 type ApiSource = { id: string; name: string; curl: string };
 
@@ -2613,7 +2614,7 @@ function ApiSourcesPanel({ onClose }: { onClose: () => void }) {
   );
 }
 
-// â”€â”€â”€ Main Page â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// Main admin events page.
 
 export default function AdminEventsPage() {
   const [events, setEvents] = useState<AdminEvent[]>([]);
@@ -2718,7 +2719,7 @@ export default function AdminEventsPage() {
     [events]
   );
 
-  // Always fetch Devpost once on mount â€” show alongside DB pending events
+  // Always fetch Devpost once on mount and show it beside database pending events.
   useEffect(() => {
     if (devpostFetchedRef.current) return;
     devpostFetchedRef.current = true;
@@ -2813,7 +2814,7 @@ export default function AdminEventsPage() {
     setPageTab(approvedEvent && isEventDone(approvedEvent) ? "done" : "working");
   };
 
-  // Filter out Devpost events already imported to DB (matched by unique source_url)
+  // Filter out Devpost events already imported to the database by source URL.
   const importedUrls = useMemo(
     () => new Set(events.map((e) => e.source_url).filter(Boolean)),
     [events]
@@ -2869,7 +2870,7 @@ export default function AdminEventsPage() {
               setZincSyncing(true);
               setZincMsg("");
               try {
-                // â”€â”€ Browser-side scraping (avoids server geo-restrictions) â”€â”€
+                // Browser-side scraping avoids server geo-restrictions.
                 // The browser is in Jordan so zinc.jo is reachable.
                 // We use corsproxy.io to allow cross-origin POST from the browser.
                 const IT_KW = [
@@ -3124,7 +3125,7 @@ export default function AdminEventsPage() {
         />
       </div>
 
-      {/* â”€â”€ Pending tab â”€â”€ */}
+      {/* Pending tab */}
       {pageTab === "pending" && (
         <>
 
@@ -3157,7 +3158,7 @@ export default function AdminEventsPage() {
         </>
       )}
 
-      {/* â”€â”€ Active tab â”€â”€ */}
+      {/* Active tab */}
       {pageTab === "working" && (
         loading ? (
           <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
@@ -3232,7 +3233,7 @@ export default function AdminEventsPage() {
           onClose={() => setSelectedPending(null)}
           onUpdated={(updated) => {
             if (selectedPending.isMock) {
-              // Was Devpost â€” now in DB; remove from devpost list, reload DB events
+              // Devpost item is now in the database; remove the transient card and reload.
               setDevpostEvents((prev) => prev.filter((e) => e.id !== selectedPending.event.id));
               loadEvents();
             } else {

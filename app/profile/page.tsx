@@ -91,6 +91,8 @@ const formatPhoneNumber = (value: string) => {
   return hasLeadingPlus ? `+${digits}` : digits;
 };
 
+// Team capacity is capped here because profile-owned team management, invites,
+// and pending applications all need to agree on the same limit.
 const TEAM_MEMBER_LIMIT = 6;
 
 const yearOptions = [
@@ -256,6 +258,8 @@ export default function ProfilePage() {
     }
   };
 
+  // Owned teams and joined teams are loaded separately because the available
+  // actions are different for owners, invited users, and members.
   const loadMemberTeams = async (userId: string) => {
     const { data, error: membershipsError } = await supabase
       .from("team_members")
@@ -969,6 +973,8 @@ export default function ProfilePage() {
     }
   };
 
+  // Removing a member can reopen a team that was previously full, allowing new
+  // applications without manually editing the team settings.
   const handleRemoveTeamMember = async (team: OwnedTeam, member: TeamMember) => {
     if (!profile) return;
 

@@ -389,6 +389,8 @@ function ViewUserModal({
       setLoading(true);
       setError("");
 
+      // Load related records together so the admin can inspect a user's full
+      // participation history without jumping between separate admin pages.
       const [clubResult, eventResult, teamResult] = await Promise.all([
         supabase
           .from("club_members")

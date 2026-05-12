@@ -194,7 +194,7 @@ export default function ClubAdminEventsPage() {
           setEvents(legacyEvents);
           await loadRegistrations(legacyEvents);
           setError(
-            "Event schedule fields are not installed yet. Run event-schedule-fields.sql to enable end date, deadline, time, capacity, and team fields."
+            "Event schedule fields are not installed yet. Check the Supabase events table schema to enable end date, deadline, time, capacity, and team fields."
           );
         }
       } else {
@@ -462,7 +462,7 @@ export default function ClubAdminEventsPage() {
         );
         setSuccess(
           usedLegacyPayload
-            ? "Event updated with basic fields. Run event-schedule-fields.sql to save schedule details."
+            ? "Event updated with basic fields. Schedule details need the latest events table schema."
             : editingEvent.approval_status === "approved"
             ? "Event updated and sent back for admin approval."
             : "Event updated successfully."
@@ -493,7 +493,7 @@ export default function ClubAdminEventsPage() {
         setEvents((prev) => [insertResult.data as ClubEvent, ...prev]);
         setSuccess(
           usedLegacyPayload
-            ? "Event created with basic fields. Run event-schedule-fields.sql to save schedule details."
+            ? "Event created with basic fields. Schedule details need the latest events table schema."
             : "Event created and submitted for admin approval."
         );
         resetForm();

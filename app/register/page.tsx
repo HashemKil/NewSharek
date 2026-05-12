@@ -38,6 +38,9 @@ export default function RegisterPage() {
   const getEmailRedirectUrl = () => `${window.location.origin}/auth/callback`;
   const normalizedPassword = password.toLowerCase();
   const emailUsername = email.trim().toLowerCase().split("@")[0] || "";
+
+  // One rule list powers both the visible strength meter and the submit-time
+  // password validation, so the UI and security checks stay in sync.
   const passwordRules = [
     {
       label: "At least 10 characters",
@@ -95,6 +98,8 @@ export default function RegisterPage() {
   const isStrongPassword =
     password.length > 0 && passwordRules.every((rule) => rule.met);
 
+  // Registration creates the Supabase auth account first, then sends the user
+  // to the verification screen before they can sign in.
   const handleRegister = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setError("");

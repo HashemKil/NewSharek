@@ -113,6 +113,8 @@ type PendingExternalJoin = {
   openedAt: number;
 };
 
+// Remember external joins while the student leaves Sharek, then confirm the
+// result when they come back before marking the event as joined.
 const EXTERNAL_JOIN_STORAGE_KEY = "sharek:pendingExternalEventJoin";
 
 const getClubName = (club: ClubRow) =>
@@ -485,6 +487,8 @@ export default function EventsPage() {
     return true;
   }, [events, router]);
 
+  // Direct joins only apply to solo events inside Sharek. Team-based events
+  // route to the details page so students can join as a group.
   const handleJoinEvent = async (eventId: string) => {
     setJoiningEventId(eventId);
     setJoinMessage("");
@@ -496,6 +500,8 @@ export default function EventsPage() {
     }
   };
 
+  // Focus and visibility changes act as the return signal after students open
+  // an external event site in a new tab.
   const askAboutExternalRegistration = useCallback(async () => {
     const raw = window.localStorage.getItem(EXTERNAL_JOIN_STORAGE_KEY);
     if (!raw) return;
@@ -697,6 +703,8 @@ export default function EventsPage() {
     return "Time not set";
   };
 
+  // Normalize raw database rows into the shape used by cards, filters, status
+  // labels, and registration availability checks.
   const normalizedEvents = useMemo<NormalizedEvent[]>(() => {
     return events.map((event) => {
       const dateInfo = formatDateInfo(event.date);
@@ -751,6 +759,8 @@ export default function EventsPage() {
     return `${year}-${month}-${day}`;
   }, [today]);
 
+  // Default to available registrations, then layer search, status, type,
+  // university, category, and date filters on top.
   const filteredEvents = useMemo(() => {
     const search = searchTerm.trim().toLowerCase();
     const weekEnd = new Date(today);

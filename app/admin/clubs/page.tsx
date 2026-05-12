@@ -1008,7 +1008,7 @@ export default function AdminClubsPage() {
         <div className="mb-6 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-600">
           {error}
           {error.includes("permission") || error.includes("policy") ? (
-            <span className="block mt-1 text-xs">Run <code className="font-mono bg-red-100 px-1 rounded">admin-clubs-management.sql</code> in Supabase SQL Editor to grant admin access.</span>
+            <span className="block mt-1 text-xs">Check the Supabase club admin policies and permissions.</span>
           ) : null}
         </div>
       )}

@@ -385,6 +385,8 @@ export default function HomePage() {
   const activeNews = psutNewsItems[activeNewsIndex % psutNewsItems.length];
   const activeNewsUrl = activeNews.url?.trim() || "";
 
+  // The hero carousel uses admin-managed slides, with local defaults available
+  // so the home page still has content before newsletter slides are configured.
   const goToPreviousNews = () => {
     setActiveNewsIndex((current) =>
       current === 0 ? psutNewsItems.length - 1 : current - 1
@@ -453,7 +455,7 @@ export default function HomePage() {
                   </button>
                 </>
               )}
-              <div className="relative max-w-3xl">
+              <div className="relative max-w-3xl pl-12 sm:pl-14">
                 <div className="flex flex-wrap items-center gap-2">
                   <span className="rounded-full bg-white/90 px-3 py-1 text-xs font-semibold uppercase text-[#1e3a8a]">
                     PSUT news
@@ -550,21 +552,27 @@ export default function HomePage() {
                   className="flex items-center justify-between rounded-2xl border border-[#c7d5fb] bg-[#f8fbff] px-4 py-3 text-sm font-semibold text-[#1e3a8a] transition hover:bg-[#eef3ff]"
                 >
                   Browse open events
-                  <span aria-hidden="true">-&gt;</span>
+                  <svg aria-hidden="true" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                    <path d="M9 18l6-6-6-6" />
+                  </svg>
                 </Link>
                 <Link
                   href="/clubs"
                   className="flex items-center justify-between rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-700 transition hover:border-[#c7d5fb] hover:bg-white"
                 >
                   Find clubs to join
-                  <span aria-hidden="true">-&gt;</span>
+                  <svg aria-hidden="true" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                    <path d="M9 18l6-6-6-6" />
+                  </svg>
                 </Link>
                 <Link
                   href="/teams"
                   className="flex items-center justify-between rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-700 transition hover:border-[#c7d5fb] hover:bg-white"
                 >
                   Manage teams
-                  <span aria-hidden="true">-&gt;</span>
+                  <svg aria-hidden="true" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                    <path d="M9 18l6-6-6-6" />
+                  </svg>
                 </Link>
               </div>
             </div>
