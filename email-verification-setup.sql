@@ -46,12 +46,12 @@ using (auth.uid() = id)
 with check (auth.uid() = id);
 
 create or replace function public.get_email_by_student_id(p_student_id text)
-returns table (email text)
+returns table (email text, portal_verified boolean)
 language sql
 security definer
 set search_path = public
 as $$
-  select profiles.email
+  select profiles.email, profiles.portal_verified
   from public.profiles
   where profiles.student_id = p_student_id
   limit 1;

@@ -6,11 +6,43 @@ import { useEffect, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { supabase } from "../lib/supabase";
 
+type ProfileReminder = {
+  missingFields: string[];
+};
+
+const isBlank = (value: string | null | undefined) => !value?.trim();
+
+const getMissingProfileFields = (profile: {
+  full_name?: string | null;
+  phone_number?: string | null;
+  student_id?: string | null;
+  major?: string | null;
+  academic_year?: string | null;
+  bio?: string | null;
+  skills?: string[] | null;
+  interests?: string[] | null;
+}) => {
+  const missing: string[] = [];
+
+  if (isBlank(profile.full_name)) missing.push("Full name");
+  if (isBlank(profile.phone_number)) missing.push("Phone number");
+  if (isBlank(profile.student_id)) missing.push("Student ID");
+  if (isBlank(profile.major)) missing.push("Major");
+  if (isBlank(profile.academic_year)) missing.push("Academic year");
+  if (isBlank(profile.bio)) missing.push("Bio");
+  if (!profile.skills?.length) missing.push("Skills");
+  if (!profile.interests?.length) missing.push("Interests");
+
+  return missing;
+};
+
 export default function AppNavbar() {
   const pathname = usePathname();
   const router = useRouter();
   const [isAdmin, setIsAdmin] = useState(false);
   const [isClubAdmin, setIsClubAdmin] = useState(false);
+  const [profileReminder, setProfileReminder] =
+    useState<ProfileReminder | null>(null);
 
   // On mount, check if the logged-in user is an admin
   useEffect(() => {
@@ -24,7 +56,9 @@ export default function AppNavbar() {
       const [{ data: profile }, { data: assignedClub }] = await Promise.all([
         supabase
           .from("profiles")
-          .select("is_admin, is_club_admin")
+          .select(
+            "is_admin, full_name, phone_number, student_id, major, academic_year, bio, skills, interests"
+          )
           .eq("id", user.id)
           .single(),
         supabase
@@ -36,7 +70,14 @@ export default function AppNavbar() {
       ]);
 
       setIsAdmin(profile?.is_admin === true);
-      setIsClubAdmin(profile?.is_club_admin === true || Boolean(assignedClub?.id));
+      setIsClubAdmin(Boolean(assignedClub?.id));
+
+      if (profile) {
+        const missingFields = getMissingProfileFields(profile);
+        setProfileReminder(
+          missingFields.length > 0 ? { missingFields } : null
+        );
+      }
     };
 
     checkAdmin();
@@ -97,7 +138,7 @@ export default function AppNavbar() {
             );
           })}
 
-          {/* Admin link â€” only visible to admins */}
+          {/* Admin link - only visible to admins */}
           {isAdmin && (
             <Link
               href="/admin"
@@ -107,7 +148,7 @@ export default function AppNavbar() {
                   : "text-amber-600 hover:bg-amber-50 hover:text-amber-700"
               }`}
             >
-              âš™ Admin
+              Admin
             </Link>
           )}
 
@@ -136,6 +177,30 @@ export default function AppNavbar() {
           </button>
         </nav>
       </div>
+
+      {profileReminder && (
+        <div className="border-t border-amber-100 bg-amber-50">
+          <div className="mx-auto flex max-w-[1800px] flex-col gap-3 px-4 py-3 text-sm text-amber-900 sm:flex-row sm:items-center sm:justify-between sm:px-6 lg:px-8 xl:px-10 2xl:px-12">
+            <p>
+              Complete your profile so clubs and event organizers can review
+              your information. Missing:{" "}
+              <span className="font-semibold">
+                {profileReminder.missingFields.slice(0, 3).join(", ")}
+                {profileReminder.missingFields.length > 3
+                  ? ` +${profileReminder.missingFields.length - 3} more`
+                  : ""}
+              </span>
+              .
+            </p>
+            <Link
+              href="/profile"
+              className="w-fit rounded-lg border border-amber-200 bg-white px-3 py-1.5 text-xs font-semibold text-amber-800 transition hover:border-amber-300 hover:bg-amber-100"
+            >
+              Complete profile
+            </Link>
+          </div>
+        </div>
+      )}
     </header>
   );
 }

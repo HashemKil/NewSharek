@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import { getClubAdminContext } from "../../lib/clubAdmin";
 import { inferEventCategory } from "../../lib/eventCategories";
 import { supabase } from "../../lib/supabase";
+import { formatTagLabel } from "../../lib/tagLabels";
 
 type Stats = {
   totalClubs: number;
@@ -173,7 +174,7 @@ export default function ClubAdminDashboard() {
               {managedClub.name?.trim() || managedClub.title?.trim() || "Your Club"}
             </h2>
             <span className="rounded-full border border-slate-200 bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700">
-              {managedClub.category || "Club"}
+              {formatTagLabel(managedClub.category) || "Club"}
             </span>
           </div>
         </div>
@@ -339,7 +340,7 @@ export default function ClubAdminDashboard() {
                             statusColors[status] ?? "bg-slate-100 text-slate-600"
                           }`}
                         >
-                          {status}
+                          {formatTagLabel(status)}
                         </span>
                       </td>
                     </tr>

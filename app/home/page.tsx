@@ -7,6 +7,7 @@ import AppNavbar from "../../components/AppNavbar";
 import { mergeJoinedClubs } from "../../lib/clubMembership";
 import { inferEventCategory } from "../../lib/eventCategories";
 import { supabase } from "../../lib/supabase";
+import { formatTagLabel } from "../../lib/tagLabels";
 
 type Profile = {
   id: string;
@@ -384,18 +385,6 @@ export default function HomePage() {
   const activeNews = psutNewsItems[activeNewsIndex % psutNewsItems.length];
   const activeNewsUrl = activeNews.url?.trim() || "";
 
-  const openActiveNewsLink = (target: EventTarget | null) => {
-    if (!activeNewsUrl) return;
-    if (
-      target instanceof HTMLElement &&
-      target.closest("button, a, input, select, textarea")
-    ) {
-      return;
-    }
-
-    window.location.href = activeNewsUrl;
-  };
-
   const goToPreviousNews = () => {
     setActiveNewsIndex((current) =>
       current === 0 ? psutNewsItems.length - 1 : current - 1
@@ -440,20 +429,30 @@ export default function HomePage() {
         <div className="grid gap-6 xl:grid-cols-[minmax(0,1.55fr)_430px] 2xl:grid-cols-[minmax(0,1.7fr)_500px]">
           <section className="overflow-hidden rounded-[28px] border border-slate-200 bg-white shadow-sm">
             <div
-              role={activeNewsUrl ? "link" : undefined}
-              tabIndex={activeNewsUrl ? 0 : undefined}
-              onClick={(event) => openActiveNewsLink(event.target)}
-              onKeyDown={(event) => {
-                if (event.key === "Enter") {
-                  openActiveNewsLink(event.target);
-                }
-              }}
-              className={`relative flex min-h-[560px] flex-col justify-end bg-cover bg-center p-6 text-white sm:p-8 xl:min-h-[620px] ${
-                activeNewsUrl ? "cursor-pointer" : ""
-              }`}
+              className="relative flex min-h-[560px] flex-col justify-end bg-cover bg-center p-6 text-white sm:p-8 xl:min-h-[620px]"
               style={{ backgroundImage: `url(${activeNews.image})` }}
             >
               <div className="absolute inset-0 bg-gradient-to-t from-slate-950/85 via-slate-950/40 to-slate-950/10" />
+              {psutNewsItems.length > 1 && (
+                <>
+                  <button
+                    type="button"
+                    onClick={goToPreviousNews}
+                    aria-label="Previous news"
+                    className="absolute left-4 top-1/2 z-10 flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full border border-white/30 bg-slate-950/35 text-2xl font-semibold text-white shadow-sm backdrop-blur transition hover:bg-white hover:text-[#1e3a8a] focus:outline-none focus:ring-2 focus:ring-white/70"
+                  >
+                    &lt;
+                  </button>
+                  <button
+                    type="button"
+                    onClick={goToNextNews}
+                    aria-label="Next news"
+                    className="absolute right-4 top-1/2 z-10 flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full border border-white/30 bg-slate-950/35 text-2xl font-semibold text-white shadow-sm backdrop-blur transition hover:bg-white hover:text-[#1e3a8a] focus:outline-none focus:ring-2 focus:ring-white/70"
+                  >
+                    &gt;
+                  </button>
+                </>
+              )}
               <div className="relative max-w-3xl">
                 <div className="flex flex-wrap items-center gap-2">
                   <span className="rounded-full bg-white/90 px-3 py-1 text-xs font-semibold uppercase text-[#1e3a8a]">
@@ -474,12 +473,12 @@ export default function HomePage() {
                     href={activeNewsUrl}
                     className="mt-6 inline-flex rounded-lg bg-white px-4 py-2 text-sm font-semibold text-[#1e3a8a] transition hover:opacity-90"
                   >
-                    Read full news
+                    Details
                   </a>
                 )}
               </div>
 
-              <div className="relative mt-8 flex flex-wrap items-center justify-between gap-3">
+              <div className="relative mt-8 flex flex-wrap items-center gap-3">
                 <div className="flex gap-2">
                   {psutNewsItems.map((item, index) => (
                     <button
@@ -494,23 +493,6 @@ export default function HomePage() {
                       }`}
                     />
                   ))}
-                </div>
-
-                <div className="flex gap-2">
-                  <button
-                    type="button"
-                    onClick={goToPreviousNews}
-                    className="rounded-lg border border-white/30 bg-white/10 px-4 py-2 text-sm font-semibold text-white backdrop-blur transition hover:bg-white/20"
-                  >
-                    Previous
-                  </button>
-                  <button
-                    type="button"
-                    onClick={goToNextNews}
-                    className="rounded-lg bg-white px-4 py-2 text-sm font-semibold text-[#1e3a8a] transition hover:opacity-90"
-                  >
-                    Next
-                  </button>
                 </div>
               </div>
             </div>
@@ -696,7 +678,7 @@ export default function HomePage() {
                         <div className="min-w-0">
                           <p className="truncate font-semibold text-slate-900">{clubName}</p>
                           <p className="text-xs text-slate-500">
-                            {club.category || "Club"}
+                            {formatTagLabel(club.category) || "Club"}
                           </p>
                         </div>
                       </Link>

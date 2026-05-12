@@ -6,6 +6,7 @@ import { useParams, useRouter } from "next/navigation";
 import AppNavbar from "../../../components/AppNavbar";
 import { inferEventCategory } from "../../../lib/eventCategories";
 import { supabase } from "../../../lib/supabase";
+import { formatTagLabel } from "../../../lib/tagLabels";
 
 type EventRow = {
   id: string;
@@ -1035,7 +1036,7 @@ export default function EventDetailsPage() {
                       eventStatus
                     )}`}
                   >
-                    {eventStatus}
+                    {formatTagLabel(eventStatus)}
                   </span>
                 </div>
 

@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import AppNavbar from "../../components/AppNavbar";
 import { supabase } from "../../lib/supabase";
+import { formatTagLabel } from "../../lib/tagLabels";
 
 type Profile = {
   id: string;
@@ -688,7 +689,7 @@ export default function TeamsPage() {
               {memberProfile?.major || "Major not added"}
             </p>
             <p className="mt-1 text-xs font-semibold text-gray-500">
-              {member.status}
+              {formatTagLabel(member.status)}
             </p>
           </div>
 
@@ -728,7 +729,7 @@ export default function TeamsPage() {
                 type="button"
                 onClick={() => handleRemoveMember(member)}
                 disabled={savingId === `remove-${member.id}`}
-                className="rounded-lg border border-red-200 px-3 py-2 text-xs font-semibold text-red-600 hover:bg-red-50 disabled:opacity-60"
+                className="rounded-lg border border-red-600 bg-red-600 px-3 py-2 text-xs font-semibold text-white shadow-sm hover:bg-red-700 disabled:opacity-60"
               >
                 Remove
               </button>

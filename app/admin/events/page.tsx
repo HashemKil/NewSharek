@@ -7,6 +7,7 @@ import {
   normalizeEventCategory,
 } from "../../../lib/eventCategories";
 import { supabase } from "../../../lib/supabase";
+import { formatTagLabel } from "../../../lib/tagLabels";
 
 // â”€â”€â”€ Types â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
@@ -220,7 +221,7 @@ const CATEGORY_COLORS: Record<string, string> = {
 };
 
 function formatDate(dateStr: string | null) {
-  if (!dateStr) return "â€”";
+  if (!dateStr) return "-";
   return new Date(dateStr).toLocaleDateString("en-GB", {
     day: "2-digit",
     month: "short",
@@ -229,7 +230,7 @@ function formatDate(dateStr: string | null) {
 }
 
 function formatDateTime(dateStr: string | null) {
-  if (!dateStr) return "â€”";
+  if (!dateStr) return "-";
   return new Date(dateStr).toLocaleString("en-GB", {
     day: "2-digit",
     month: "short",
@@ -346,7 +347,7 @@ function StatusBadge({ status }: { status: string }) {
       className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold capitalize ring-1 ring-inset ${s.badge}`}
     >
       <span className={`h-1.5 w-1.5 rounded-full ${s.dot}`} />
-      {status}
+      {formatTagLabel(status)}
     </span>
   );
 }
@@ -1032,12 +1033,12 @@ function PendingModal({
             )}
             <div className="sm:col-span-2">
               <Label>Description</Label>
-              <textarea rows={4} value={edit.description} onChange={(e) => setEdit({ ...edit, description: e.target.value })} placeholder="Event descriptionâ€¦" className={`${inputCls} resize-none`} />
+              <textarea rows={4} value={edit.description} onChange={(e) => setEdit({ ...edit, description: e.target.value })} placeholder="Event description..." className={`${inputCls} resize-none`} />
             </div>
           </div>
 
           <button onClick={handleSave} disabled={saving} className="self-start rounded-xl bg-[#1e3a8a] px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-[#1e40af] disabled:opacity-60">
-            {saving ? "Savingâ€¦" : "Save changes"}
+            {saving ? "Saving..." : "Save changes"}
           </button>
 
           <div className="border-t border-slate-100" />
@@ -1055,7 +1056,7 @@ function PendingModal({
                 className="flex items-center gap-2 rounded-xl bg-emerald-600 px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-700 disabled:opacity-60"
               >
                 <CheckIcon />
-                {approving ? "Processingâ€¦" : "Approve & publish"}
+                {approving ? "Processing..." : "Approve & publish"}
               </button>
               <button
                 onClick={() => handleStatusChange("rejected")}
@@ -1063,7 +1064,7 @@ function PendingModal({
                 className="flex items-center gap-2 rounded-xl border border-red-200 px-5 py-2.5 text-sm font-semibold text-red-600 transition hover:bg-red-50 disabled:opacity-60"
               >
                 <CloseIcon size={14} />
-                {approving ? "Processingâ€¦" : "Reject event"}
+                {approving ? "Processing..." : "Reject event"}
               </button>
             </div>
           </div>
@@ -1077,14 +1078,14 @@ function PendingModal({
               <div className="flex items-center gap-3">
                 <span className="text-sm text-slate-600">Are you sure?</span>
                 <button onClick={handleDelete} disabled={deleting} className="rounded-xl bg-red-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-red-700 disabled:opacity-60">
-                  {deleting ? "Deletingâ€¦" : "Yes, delete"}
+                  {deleting ? "Deleting..." : "Yes, delete"}
                 </button>
                 <button onClick={() => setDeleteConfirm(false)} className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-medium text-slate-600 transition hover:bg-slate-100">
                   Cancel
                 </button>
               </div>
             ) : (
-              <button onClick={() => setDeleteConfirm(true)} className="flex items-center gap-2 rounded-xl border border-red-200 px-4 py-2.5 text-sm font-semibold text-red-600 transition hover:bg-red-50">
+              <button onClick={() => setDeleteConfirm(true)} className="flex items-center gap-2 rounded-xl border border-red-600 bg-red-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-red-700">
                 <TrashIcon />
                 Delete event
               </button>
@@ -1342,7 +1343,7 @@ function CreateEventModal({
                   <button
                     type="button"
                     onClick={() => setForm((current) => ({ ...current, image_url: "" }))}
-                    className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-600 transition hover:bg-slate-100"
+                    className="rounded-xl border border-red-300 bg-red-50 px-4 py-2.5 text-sm font-semibold text-red-700 transition hover:bg-red-100"
                   >
                     Remove image
                   </button>
@@ -1992,11 +1993,11 @@ function ActiveModal({
           <div className="flex flex-col gap-5 p-6">
             <InfoRow icon={<CalendarIcon />} label="Date" value={formatDate(event.event_date)} />
             <InfoRow icon={<CalendarIcon />} label="Registration deadline" value={formatDateTime(event.registration_deadline)} />
-            <InfoRow icon={<PinIcon />} label="Location" value={event.location ?? "â€”"} />
+            <InfoRow icon={<PinIcon />} label="Location" value={event.location ?? "-"} />
             {event.location_details && (
               <InfoRow icon={<PinIcon />} label="Location details" value={event.location_details} />
             )}
-            <InfoRow icon={<TagIcon />} label="Category" value={inferEventCategory(event.category, event.title, event.description) || "â€”"} />
+            <InfoRow icon={<TagIcon />} label="Category" value={inferEventCategory(event.category, event.title, event.description) || "-"} />
             {event.prize && <InfoRow icon={<TagIcon />} label="Prize" value={event.prize} />}
             {event.is_team_based && (
               <InfoRow
@@ -2181,7 +2182,7 @@ function ActiveModal({
               </div>
             </div>
             <button onClick={handleSaveEdit} disabled={saving} className="self-start rounded-xl bg-emerald-600 px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-700 disabled:opacity-60">
-              {saving ? "Savingâ€¦" : "Save changes"}
+              {saving ? "Saving..." : "Save changes"}
             </button>
             <p className="text-xs text-slate-400">Changes are reflected live on the homepage immediately after saving.</p>
           </div>
@@ -2218,11 +2219,11 @@ function ActiveModal({
                     {registrants.map((r) => (
                       <tr key={r.id} className="border-b border-slate-50 last:border-0 hover:bg-slate-50">
                         <td className="px-4 py-3">
-                          <p className="font-medium text-slate-800">{r.profiles?.full_name ?? "â€”"}</p>
+                          <p className="font-medium text-slate-800">{r.profiles?.full_name ?? "-"}</p>
                           <p className="text-xs text-slate-400">{r.profiles?.email ?? ""}</p>
                         </td>
-                        <td className="px-4 py-3 font-mono text-xs text-slate-500">{r.profiles?.student_id ?? "â€”"}</td>
-                        <td className="px-4 py-3 text-slate-500">{r.profiles?.major ?? "â€”"}</td>
+                        <td className="px-4 py-3 font-mono text-xs text-slate-500">{r.profiles?.student_id ?? "-"}</td>
+                        <td className="px-4 py-3 text-slate-500">{r.profiles?.major ?? "-"}</td>
                         <td className="px-4 py-3 text-slate-400">{formatDate(r.created_at)}</td>
                       </tr>
                     ))}
@@ -2276,7 +2277,7 @@ function ActiveModal({
                               ? "bg-red-50 text-red-600"
                               : "bg-amber-50 text-amber-700"
                           }`}>
-                            {status}
+                            {formatTagLabel(status)}
                           </span>
                         </div>
                         {team.description && (
@@ -2312,7 +2313,7 @@ function ActiveModal({
                               {m.profiles?.full_name ?? "Unknown"}
                             </p>
                             <p className="text-xs text-slate-400">
-                              {m.profiles?.student_id ?? "No student ID"} Â· {m.status ?? "pending"}
+                              {m.profiles?.student_id ?? "No student ID"} - {formatTagLabel(m.status ?? "pending")}
                             </p>
                           </div>
                           <div className="flex flex-wrap gap-2">
@@ -2555,7 +2556,7 @@ function ApiSourcesPanel({ onClose }: { onClose: () => void }) {
             <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">Built-in source</p>
             <div className="flex items-center justify-between rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
               <div>
-                <p className="font-semibold text-slate-800 text-sm">Devpost â€” Recommended Hackathons</p>
+                <p className="font-semibold text-slate-800 text-sm">Devpost - Recommended Hackathons</p>
                 <p className="text-xs text-slate-400 mt-0.5">https://devpost.com/api/hackathons/recommended_hackathons</p>
               </div>
               <span className="rounded-full bg-emerald-100 px-2.5 py-1 text-xs font-semibold text-emerald-700">Active</span>
@@ -2602,7 +2603,7 @@ function ApiSourcesPanel({ onClose }: { onClose: () => void }) {
                 <textarea rows={5} value={curl} onChange={e => setCurl(e.target.value)} placeholder={"curl 'https://api.example.com/events' \\\n  -H 'accept: application/json'"} className={`${inputCls} resize-none font-mono text-xs`} />
               </div>
               <button onClick={handleAdd} disabled={saving} className="rounded-xl bg-[#1e3a8a] px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-[#1e40af] disabled:opacity-60">
-                {saving ? "Savingâ€¦" : "Add source"}
+                {saving ? "Saving..." : "Add source"}
               </button>
             </div>
           </div>
@@ -3116,7 +3117,7 @@ export default function AdminEventsPage() {
         </svg>
         <input
           type="text"
-          placeholder="Search eventsâ€¦"
+          placeholder="Search events..."
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           className="w-full rounded-xl border border-slate-200 bg-white py-2.5 pl-10 pr-4 text-sm outline-none transition focus:border-[#1e3a8a] focus:ring-2 focus:ring-[#1e3a8a]/10"
@@ -3130,13 +3131,13 @@ export default function AdminEventsPage() {
           {(loading || devpostLoading) ? (
             <div className="flex flex-col items-center gap-4 py-16">
               <div className="h-10 w-10 animate-spin rounded-full border-4 border-[#1e3a8a] border-t-transparent" />
-              <p className="text-sm text-slate-500">{loading ? "Loading eventsâ€¦" : "Fetching live events from Devpostâ€¦"}</p>
+              <p className="text-sm text-slate-500">{loading ? "Loading events..." : "Fetching live events from Devpost..."}</p>
             </div>
           ) : displayPending.length === 0 ? (
             <EmptyState
               icon={<svg width="40" height="40" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2" /><path d="M16 2v4M8 2v4M3 10h18" /></svg>}
               message="No pending events."
-              sub="All caught up â€” or Devpost returned no results."
+              sub="All caught up - or Devpost returned no results."
             />
           ) : (
             <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">

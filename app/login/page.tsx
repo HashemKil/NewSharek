@@ -10,13 +10,13 @@ export default function LoginPage() {
   const router = useRouter();
 
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [studentId, setStudentId] = useState("");
   const [unverifiedEmail, setUnverifiedEmail] = useState("");
 
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
   const [loading, setLoading] = useState(false);
-  const [resending, setResending] = useState(false);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -39,8 +39,12 @@ export default function LoginPage() {
     try {
       const cleanStudentId = studentId.trim();
 
-      // Look up the user's email by student ID. The RPC works even when
-      // profiles are hidden by RLS, if the database function is installed.
+      const { data: directProfile } = await supabase
+        .from("profiles")
+        .select("email, portal_verified")
+        .eq("student_id", cleanStudentId)
+        .maybeSingle();
+
       const { data: rpcProfile } = await supabase
         .rpc("get_email_by_student_id", { p_student_id: cleanStudentId })
         .maybeSingle();
@@ -49,21 +53,28 @@ export default function LoginPage() {
         rpcProfile && typeof rpcProfile === "object" && "email" in rpcProfile
           ? String(rpcProfile.email)
           : "";
+      const hasRpcPortalVerified =
+        rpcProfile &&
+        typeof rpcProfile === "object" &&
+        "portal_verified" in rpcProfile;
+      const rpcPortalVerified = hasRpcPortalVerified
+        ? Boolean(rpcProfile.portal_verified)
+        : null;
 
-      let email = rpcEmail;
-
-      if (!email) {
-        const { data: profile } = await supabase
-          .from("profiles")
-          .select("email")
-          .eq("student_id", cleanStudentId)
-          .maybeSingle();
-
-        email = profile?.email;
-      }
+      const email = directProfile?.email || rpcEmail;
+      const profileVerificationKnown =
+        directProfile?.portal_verified !== undefined || hasRpcPortalVerified;
+      const isPortalVerified =
+        directProfile?.portal_verified === true || rpcPortalVerified === true;
 
       if (!email) {
         setError("No account found for that Student ID.");
+        return;
+      }
+
+      if (profileVerificationKnown && !isPortalVerified) {
+        setUnverifiedEmail(email);
+        setError("Please verify your email before signing in.");
         return;
       }
 
@@ -76,6 +87,13 @@ export default function LoginPage() {
         if (error.message.toLowerCase().includes("email not confirmed")) {
           setUnverifiedEmail(email);
           setError("Please verify your email before signing in.");
+          return;
+        }
+        if (error.message.toLowerCase().includes("invalid login credentials")) {
+          setError(
+            "Invalid login credentials. If this is a new account, verify your email first or reset your password."
+          );
+          setUnverifiedEmail(email);
           return;
         }
         setError(error.message);
@@ -94,10 +112,18 @@ export default function LoginPage() {
       }
 
       if (user?.id) {
-        await supabase
+        const { data: verifiedProfile } = await supabase
           .from("profiles")
-          .update({ portal_verified: true })
-          .eq("id", user.id);
+          .select("portal_verified")
+          .eq("id", user.id)
+          .maybeSingle();
+
+        if (verifiedProfile?.portal_verified !== true) {
+          await supabase.auth.signOut();
+          setUnverifiedEmail(email);
+          setError("Please verify your email before signing in.");
+          return;
+        }
       }
 
       router.push("/home");
@@ -108,32 +134,9 @@ export default function LoginPage() {
     }
   };
 
-  const handleResendVerification = async () => {
-    if (!unverifiedEmail) return;
-
-    setResending(true);
-    setError("");
-    setSuccess("");
-
-    const { error: resendError } = await supabase.auth.resend({
-      type: "signup",
-      email: unverifiedEmail,
-      options: {
-        emailRedirectTo: `${window.location.origin}/auth/callback`,
-      },
-    });
-
-    if (resendError) {
-      setError(resendError.message);
-    } else {
-      setSuccess("Verification email sent again. Check your university email.");
-    }
-
-    setResending(false);
-  };
-
   const inputClass =
     "w-full border border-gray-300 rounded-lg px-4 py-3 text-sm text-gray-900 placeholder-gray-400 outline-none focus:border-[#1e3a8a] focus:ring-2 focus:ring-[#1e3a8a]/10";
+  const passwordInputClass = `${inputClass} pr-20`;
 
   return (
     <main className="min-h-screen bg-[#f2f4f7] flex flex-col">
@@ -166,11 +169,10 @@ export default function LoginPage() {
               {unverifiedEmail && (
                 <button
                   type="button"
-                  onClick={handleResendVerification}
-                  disabled={resending}
+                  onClick={() => router.push(`/verify-email?email=${encodeURIComponent(unverifiedEmail)}`)}
                   className="mt-3 block rounded-lg border border-red-200 bg-white px-3 py-2 text-sm font-semibold text-red-600 hover:bg-red-50 disabled:opacity-60"
                 >
-                  {resending ? "Sending..." : "Resend verification email"}
+                  Verify email
                 </button>
               )}
             </div>
@@ -193,14 +195,25 @@ export default function LoginPage() {
               className={inputClass}
             />
 
-            <input
-              type="password"
-              placeholder="Password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              required
-              className={inputClass}
-            />
+            <div className="relative">
+              <input
+                type={showPassword ? "text" : "password"}
+                placeholder="Password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                required
+                className={passwordInputClass}
+              />
+              <button
+                type="button"
+                onMouseDown={(event) => event.preventDefault()}
+                onClick={() => setShowPassword((value) => !value)}
+                aria-label={showPassword ? "Hide password" : "Show password"}
+                className="absolute inset-y-0 right-2 my-auto h-8 w-14 rounded-md text-xs font-semibold text-[#1e3a8a] transition hover:bg-[#eef3ff] focus:outline-none focus:ring-2 focus:ring-[#1e3a8a]/20"
+              >
+                {showPassword ? "Hide" : "Show"}
+              </button>
+            </div>
 
             <button
               type="submit"
@@ -211,10 +224,9 @@ export default function LoginPage() {
             </button>
           </form>
 
-          <div className="mt-5 flex justify-between text-sm">
-            <span className="text-gray-500">Donâ€™t have an account?</span>
+          <div className="mt-5 text-sm">
             <Link href="/register" className="text-[#1e3a8a] hover:underline">
-              Sign Up
+              Don&apos;t have an account?
             </Link>
           </div>
         </div>

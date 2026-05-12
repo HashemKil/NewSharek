@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { getClubAdminContext } from "../../../lib/clubAdmin";
 import { supabase } from "../../../lib/supabase";
+import { formatTagLabel } from "../../../lib/tagLabels";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -58,7 +59,7 @@ function StatusBadge({ status }: { status: string }) {
   return (
     <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold capitalize ring-1 ring-inset ${s.badge}`}>
       <span className={`h-1.5 w-1.5 rounded-full ${s.dot}`} />
-      {status}
+      {formatTagLabel(status)}
     </span>
   );
 }
@@ -113,7 +114,7 @@ function EventDetailModal({ event, onClose }: { event: ClubHistoryEvent; onClose
           <div className="flex flex-col gap-2">
             <div className="flex flex-wrap items-center gap-2">
               {event.category && (
-                <span className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${catColor}`}>{event.category}</span>
+                <span className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${catColor}`}>{formatTagLabel(event.category)}</span>
               )}
               <StatusBadge status={status} />
               {event.is_club_members_only && (
@@ -364,7 +365,7 @@ export default function ClubAdminHistoryPage() {
                         </div>
                         {event.category && (
                           <span className={`mt-1 inline-block rounded-full px-2 py-0.5 text-[11px] font-medium ${catColor}`}>
-                            {event.category}
+                            {formatTagLabel(event.category)}
                           </span>
                         )}
                       </td>

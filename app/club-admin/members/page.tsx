@@ -284,7 +284,7 @@ export default function ClubAdminMembersPage() {
                           <button
                             onClick={() => handleRemoveMember(member)}
                             disabled={actionLoading === member.user_id}
-                            className="rounded-xl border border-red-200 px-3 py-2 text-xs font-semibold text-red-600 transition hover:bg-red-50 disabled:opacity-50"
+                            className="rounded-xl border border-red-600 bg-red-600 px-3 py-2 text-xs font-semibold text-white shadow-sm transition hover:bg-red-700 disabled:opacity-50"
                           >
                             {actionLoading === member.user_id ? "Removing..." : "Remove"}
                           </button>

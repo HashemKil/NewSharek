@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import AppNavbar from "../../components/AppNavbar";
 import { EVENT_CATEGORIES, inferEventCategory } from "../../lib/eventCategories";
 import { supabase } from "../../lib/supabase";
+import { formatTagLabel } from "../../lib/tagLabels";
 
 type EventRow = {
   id: string;
@@ -144,6 +145,12 @@ const EVENT_TYPE_TABS = [
   "Team",
 ] as const;
 
+const UNIVERSITY_EVENT_FILTERS = [
+  "All Events",
+  "In University",
+  "Outside University",
+] as const;
+
 const DATE_RANGE_FILTERS = [
   "Any Date",
   "Today",
@@ -164,6 +171,8 @@ export default function EventsPage() {
     useState<(typeof STATUS_TABS)[number]>("Still Available");
   const [selectedEventType, setSelectedEventType] =
     useState<(typeof EVENT_TYPE_TABS)[number]>("All Types");
+  const [selectedUniversityFilter, setSelectedUniversityFilter] =
+    useState<(typeof UNIVERSITY_EVENT_FILTERS)[number]>("All Events");
   const [selectedDateRange, setSelectedDateRange] =
     useState<(typeof DATE_RANGE_FILTERS)[number]>("Any Date");
   const [selectedCategory, setSelectedCategory] = useState("All Categories");
@@ -778,6 +787,13 @@ export default function EventsPage() {
           (selectedEventType === "Solo" && !event.is_team_based) ||
           (selectedEventType === "Team" && event.is_team_based);
 
+        const matchesUniversityFilter =
+          selectedUniversityFilter === "All Events" ||
+          (selectedUniversityFilter === "In University" &&
+            event.is_university_event) ||
+          (selectedUniversityFilter === "Outside University" &&
+            !event.is_university_event);
+
         const matchesDateRange =
           selectedDateRange === "Any Date" ||
           (selectedDateRange === "Today" && event.rawDateKey === todayKey) ||
@@ -811,6 +827,7 @@ export default function EventsPage() {
           matchesStatus &&
           matchesCategory &&
           matchesEventType &&
+          matchesUniversityFilter &&
           matchesDateRange &&
           matchesCustomDateRange
         );
@@ -830,6 +847,7 @@ export default function EventsPage() {
     selectedStatus,
     selectedCategory,
     selectedEventType,
+    selectedUniversityFilter,
     selectedDateRange,
     joinedEvents,
     dateFrom,
@@ -884,6 +902,7 @@ export default function EventsPage() {
     setSearchTerm("");
     setSelectedStatus("Still Available");
     setSelectedEventType("All Types");
+    setSelectedUniversityFilter("All Events");
     setSelectedDateRange("Any Date");
     setSelectedCategory("All Categories");
     setDateFrom("");
@@ -894,6 +913,7 @@ export default function EventsPage() {
     searchTerm.trim() !== "" ||
     selectedStatus !== "Still Available" ||
     selectedEventType !== "All Types" ||
+    selectedUniversityFilter !== "All Events" ||
     selectedDateRange !== "Any Date" ||
     selectedCategory !== "All Categories" ||
     Boolean(dateFrom) ||
@@ -953,11 +973,7 @@ export default function EventsPage() {
               >
                 {STATUS_TABS.map((status) => (
                   <option key={status} value={status}>
-                    {status === "upcoming"
-                      ? "Upcoming"
-                      : status === "ongoing"
-                      ? "Ongoing"
-                      : status}
+                    {formatTagLabel(status)}
                   </option>
                 ))}
               </select>
@@ -977,6 +993,27 @@ export default function EventsPage() {
                 {EVENT_TYPE_TABS.map((type) => (
                   <option key={type} value={type}>
                     {type}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <label>
+              <span className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-slate-400">
+                University
+              </span>
+              <select
+                value={selectedUniversityFilter}
+                onChange={(e) =>
+                  setSelectedUniversityFilter(
+                    e.target.value as (typeof UNIVERSITY_EVENT_FILTERS)[number]
+                  )
+                }
+                className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 outline-none transition focus:border-[#1e3a8a] focus:ring-4 focus:ring-[#1e3a8a]/10"
+              >
+                {UNIVERSITY_EVENT_FILTERS.map((scope) => (
+                  <option key={scope} value={scope}>
+                    {scope}
                   </option>
                 ))}
               </select>
@@ -1092,7 +1129,7 @@ export default function EventsPage() {
                   >
                     <div className="flex flex-wrap items-center gap-2">
                       <span className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-slate-700">
-                        {event.category}
+                        {formatTagLabel(event.category)}
                       </span>
                       <span className={eventTypeBadgeClass}>
                         {getEventTypeLabel(event)}
@@ -1105,7 +1142,7 @@ export default function EventsPage() {
                           event.status
                         )}`}
                       >
-                        {event.status}
+                        {formatTagLabel(event.status)}
                       </span>
                     </div>
 
@@ -1301,7 +1338,7 @@ export default function EventsPage() {
                         <div className="flex-1">
                           <div className="flex flex-wrap items-center gap-2">
                             <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700">
-                              {event.category}
+                              {formatTagLabel(event.category)}
                             </span>
                             <span className={eventTypeBadgeClass}>
                               {getEventTypeLabel(event)}
@@ -1323,7 +1360,7 @@ export default function EventsPage() {
                                 event.status
                               )}`}
                             >
-                              {event.status}
+                              {formatTagLabel(event.status)}
                             </span>
 
                             {isJoined && (

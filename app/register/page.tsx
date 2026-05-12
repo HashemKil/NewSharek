@@ -15,7 +15,9 @@ export default function RegisterPage() {
   const [studentId, setStudentId] = useState("");
   const [major, setMajor] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [confirmPassword, setConfirmPassword] = useState("");
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
@@ -28,6 +30,11 @@ export default function RegisterPage() {
 
   const validateStudentId = (value: string) => /^\d{8}$/.test(value);
   const validatePhoneNumber = (value: string) => /^\+?\d{7,15}$/.test(value);
+  const formatPhoneNumber = (value: string) => {
+    const hasLeadingPlus = value.trimStart().startsWith("+");
+    const digits = value.replace(/\D/g, "").slice(0, 15);
+    return hasLeadingPlus ? `+${digits}` : digits;
+  };
   const getEmailRedirectUrl = () => `${window.location.origin}/auth/callback`;
   const normalizedPassword = password.toLowerCase();
   const emailUsername = email.trim().toLowerCase().split("@")[0] || "";
@@ -97,7 +104,7 @@ export default function RegisterPage() {
     const cleanLastName = lastName.trim();
     const cleanName = `${cleanFirstName} ${cleanLastName}`.trim();
     const cleanEmail = email.trim().toLowerCase();
-    const cleanPhoneNumber = phoneNumber.trim().replace(/[\s-]/g, "");
+    const cleanPhoneNumber = formatPhoneNumber(phoneNumber);
     const cleanStudentId = studentId.trim();
     const cleanMajor = major.trim();
 
@@ -220,7 +227,7 @@ export default function RegisterPage() {
       }
 
       setSuccess(
-        "Account created. We sent a verification email to your university email. Verify it before signing in."
+        "Account created. We sent a verification email to your university email. Enter the code from the email to verify your account."
       );
 
       setFirstName("");
@@ -233,7 +240,7 @@ export default function RegisterPage() {
       setConfirmPassword("");
 
       setTimeout(() => {
-        router.push("/login?checkEmail=1");
+        router.push(`/verify-email?email=${encodeURIComponent(cleanEmail)}`);
       }, 1800);
     } catch (err) {
       console.error("Registration error:", err);
@@ -245,6 +252,7 @@ export default function RegisterPage() {
 
   const inputClass =
     "w-full border border-gray-300 rounded-lg px-4 py-3 text-sm text-gray-900 placeholder-gray-400 outline-none focus:border-[#1e3a8a] focus:ring-2 focus:ring-[#1e3a8a]/10";
+  const passwordInputClass = `${inputClass} pr-20`;
 
   return (
     <main className="min-h-screen bg-[#f2f4f7] flex flex-col">
@@ -262,12 +270,12 @@ export default function RegisterPage() {
         </div>
       </header>
 
-      <section className="flex flex-1 items-center justify-center px-4 py-12">
-        <div className="w-full max-w-lg bg-white border rounded-xl p-8 shadow-sm">
-          <h2 className="text-xl font-semibold text-[#1e3a8a] mb-2">
+      <section className="flex flex-1 items-center justify-center px-4 py-10 sm:px-6 lg:px-8">
+        <div className="w-full max-w-4xl rounded-2xl border bg-white p-6 shadow-sm sm:p-8 lg:p-10">
+          <h2 className="text-3xl font-semibold text-[#1e3a8a] mb-2">
             Create Account
           </h2>
-          <p className="text-sm text-gray-500 mb-6">
+          <p className="text-base text-gray-500 mb-8">
             Join Sharek and start exploring opportunities
           </p>
 
@@ -283,8 +291,8 @@ export default function RegisterPage() {
             </div>
           )}
 
-          <form className="space-y-4" onSubmit={handleRegister}>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <form className="space-y-5" onSubmit={handleRegister}>
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
               <input
                 type="text"
                 placeholder="First Name"
@@ -302,82 +310,123 @@ export default function RegisterPage() {
                 required
                 className={inputClass}
               />
-            </div>
 
-            <input
-              type="email"
-              placeholder="University Email (e.g. name@std.psut.edu.jo)"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              autoComplete="email"
-              autoCapitalize="none"
-              autoCorrect="off"
-              spellCheck={false}
-              required
-              className={inputClass}
-            />
-
-            <input
-              type="tel"
-              placeholder="Phone Number (e.g. +962790000000)"
-              value={phoneNumber}
-              onChange={(e) =>
-                setPhoneNumber(e.target.value.replace(/[^\d+]/g, "").slice(0, 16))
-              }
-              inputMode="tel"
-              autoComplete="tel"
-              required
-              className={inputClass}
-            />
-
-            <input
-              type="text"
-              placeholder="Student ID (e.g. 20210001)"
-              value={studentId}
-              onChange={(e) => setStudentId(e.target.value.replace(/\D/g, "").slice(0, 8))}
-              inputMode="numeric"
-              pattern="\d{8}"
-              maxLength={8}
-              title="Student ID must be exactly 8 digits."
-              required
-              className={inputClass}
-            />
-
-            <label className="block">
-              <select
-                value={major}
-                onChange={(e) => setMajor(e.target.value)}
+              <input
+                type="email"
+                placeholder="University Email (e.g. name@std.psut.edu.jo)"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                autoComplete="email"
+                autoCapitalize="none"
+                autoCorrect="off"
+                spellCheck={false}
                 required
                 className={inputClass}
-              >
-                <option value="">Select your major</option>
-                <option>Computer Science</option>
-                <option>Cyber Security</option>
-                <option>Software Engineering</option>
-                <option>Computer Graphics and Animation</option>
-                <option>Data Science and Artificial Intelligence</option>
-                <option>Business Administration</option>
-                <option>Accounting</option>
-                <option>E-Marketing and Social Media</option>
-                <option>Business Information Technology</option>
-                <option>Electronics Engineering</option>
-                <option>Computer Engineering</option>
-                <option>Networks and Information Security Engineering</option>
-                <option>Electrical Power and Energy Engineering</option>
-                <option>Communications Engineering / Internet of Things</option>
-              </select>
-            </label>
+              />
 
-            <input
-              type="password"
-              placeholder="Password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              minLength={10}
-              autoComplete="new-password"
-              required
-              className={inputClass}
-            />
+              <input
+                type="tel"
+                placeholder="Phone Number (e.g. +962790000000)"
+                value={phoneNumber}
+                onChange={(e) =>
+                  setPhoneNumber(formatPhoneNumber(e.target.value))
+                }
+                inputMode="tel"
+                autoComplete="tel"
+                maxLength={16}
+                required
+                className={inputClass}
+              />
+
+              <input
+                type="text"
+                placeholder="Student ID (e.g. 20210001)"
+                value={studentId}
+                onChange={(e) => setStudentId(e.target.value.replace(/\D/g, "").slice(0, 8))}
+                inputMode="numeric"
+                pattern="\d{8}"
+                maxLength={8}
+                title="Student ID must be exactly 8 digits."
+                required
+                className={inputClass}
+              />
+
+              <label className="block md:col-span-2">
+                <select
+                  value={major}
+                  onChange={(e) => setMajor(e.target.value)}
+                  required
+                  className={inputClass}
+                >
+                  <option value="">Select your major</option>
+                  <option>Computer Science</option>
+                  <option>Cyber Security</option>
+                  <option>Software Engineering</option>
+                  <option>Computer Graphics and Animation</option>
+                  <option>Data Science and Artificial Intelligence</option>
+                  <option>Business Administration</option>
+                  <option>Accounting</option>
+                  <option>E-Marketing and Social Media</option>
+                  <option>Business Information Technology</option>
+                  <option>Electronics Engineering</option>
+                  <option>Computer Engineering</option>
+                  <option>Networks and Information Security Engineering</option>
+                  <option>Electrical Power and Energy Engineering</option>
+                  <option>Communications Engineering / Internet of Things</option>
+                </select>
+              </label>
+            </div>
+
+            <div className="grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(320px,0.85fr)]">
+              <div className="space-y-4">
+                <div className="relative">
+                  <input
+                    type={showPassword ? "text" : "password"}
+                    placeholder="Password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    minLength={10}
+                    autoComplete="new-password"
+                    required
+                    className={passwordInputClass}
+                  />
+                  <button
+                    type="button"
+                    onMouseDown={(event) => event.preventDefault()}
+                    onClick={() => setShowPassword((value) => !value)}
+                    aria-label={showPassword ? "Hide password" : "Show password"}
+                    className="absolute inset-y-0 right-2 my-auto h-8 w-14 rounded-md text-xs font-semibold text-[#1e3a8a] transition hover:bg-[#eef3ff] focus:outline-none focus:ring-2 focus:ring-[#1e3a8a]/20"
+                  >
+                    {showPassword ? "Hide" : "Show"}
+                  </button>
+                </div>
+
+                <div className="relative">
+                  <input
+                    type={showConfirmPassword ? "text" : "password"}
+                    placeholder="Confirm Password"
+                    value={confirmPassword}
+                    onChange={(e) => setConfirmPassword(e.target.value)}
+                    minLength={10}
+                    autoComplete="new-password"
+                    required
+                    className={passwordInputClass}
+                  />
+                  <button
+                    type="button"
+                    onMouseDown={(event) => event.preventDefault()}
+                    onClick={() => setShowConfirmPassword((value) => !value)}
+                    aria-label={
+                      showConfirmPassword
+                        ? "Hide confirmation password"
+                        : "Show confirmation password"
+                    }
+                    className="absolute inset-y-0 right-2 my-auto h-8 w-14 rounded-md text-xs font-semibold text-[#1e3a8a] transition hover:bg-[#eef3ff] focus:outline-none focus:ring-2 focus:ring-[#1e3a8a]/20"
+                  >
+                    {showConfirmPassword ? "Hide" : "Show"}
+                  </button>
+                </div>
+              </div>
 
             <div className="rounded-xl border border-gray-200 bg-slate-50 p-4">
               <div className="flex items-center justify-between gap-3">
@@ -418,17 +467,7 @@ export default function RegisterPage() {
                 ))}
               </div>
             </div>
-
-            <input
-              type="password"
-              placeholder="Confirm Password"
-              value={confirmPassword}
-              onChange={(e) => setConfirmPassword(e.target.value)}
-              minLength={10}
-              autoComplete="new-password"
-              required
-              className={inputClass}
-            />
+            </div>
 
             <button
               type="submit"

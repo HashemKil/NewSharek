@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "../../../lib/supabase";
+import { formatTagLabel } from "../../../lib/tagLabels";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -61,7 +62,7 @@ function StatusBadge({ status }: { status: string }) {
   return (
     <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold capitalize ring-1 ring-inset ${s.badge}`}>
       <span className={`h-1.5 w-1.5 rounded-full ${s.dot}`} />
-      {status}
+      {formatTagLabel(status)}
     </span>
   );
 }
@@ -116,7 +117,7 @@ function EventDetailModal({ event, onClose }: { event: HistoryEvent; onClose: ()
           <div className="flex flex-col gap-2">
             <div className="flex flex-wrap items-center gap-2">
               {event.category && (
-                <span className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${catColor}`}>{event.category}</span>
+                <span className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${catColor}`}>{formatTagLabel(event.category)}</span>
               )}
               <StatusBadge status={status} />
             </div>
@@ -225,7 +226,9 @@ export default function AdminHistoryPage() {
     setLoading(false);
   };
 
-  useEffect(() => { loadEvents(0); }, []);
+  useEffect(() => {
+    void Promise.resolve().then(() => loadEvents(0));
+  }, []);
 
   const filtered = useMemo(() => {
     return events.filter((e) => {
@@ -341,7 +344,7 @@ export default function AdminHistoryPage() {
                         <p className="font-semibold text-slate-900">{event.title}</p>
                         {event.category && (
                           <span className={`mt-1 inline-block rounded-full px-2 py-0.5 text-[11px] font-medium ${catColor}`}>
-                            {event.category}
+                            {formatTagLabel(event.category)}
                           </span>
                         )}
                       </td>

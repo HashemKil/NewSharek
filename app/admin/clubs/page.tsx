@@ -4,6 +4,7 @@ export const dynamic = "force-dynamic";
 
 import { useEffect, useState } from "react";
 import { supabase } from "../../../lib/supabase";
+import { formatTagLabel } from "../../../lib/tagLabels";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -225,7 +226,7 @@ function CreateClubModal({
                     <button
                       type="button"
                       onClick={() => setImageUrl("")}
-                      className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-600 transition hover:bg-slate-100"
+                      className="rounded-xl border border-red-600 bg-red-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-red-700"
                     >
                       Remove
                     </button>
@@ -602,7 +603,7 @@ function ClubModal({
             <h2 className="mt-1 text-base font-bold text-slate-900">{displayName}</h2>
             {club.category && (
               <span className="mt-1 inline-block rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-medium text-slate-600">
-                {club.category}
+                {formatTagLabel(club.category)}
               </span>
             )}
           </div>
@@ -725,7 +726,7 @@ function ClubModal({
                   disabled={adminSaving || membersLoading}
                   className="rounded-xl border border-purple-200 bg-purple-50 px-5 py-2.5 text-sm font-semibold text-purple-700 transition hover:bg-purple-100 disabled:opacity-60"
                 >
-                  {adminSaving ? "Assigningâ€¦" : "Save Club Admin"}
+                  {adminSaving ? "Assigning..." : "Save Club Admin"}
                 </button>
                 <p className="text-xs text-slate-400">Created {fmt(club.created_at)}</p>
               </div>
@@ -741,7 +742,7 @@ function ClubModal({
                   {!deleteConfirm ? (
                     <button
                       onClick={() => setDeleteConfirm(true)}
-                      className="rounded-xl border border-red-200 bg-white px-4 py-2 text-sm font-semibold text-red-600 transition hover:bg-red-100"
+                      className="rounded-xl border border-red-600 bg-red-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-red-700"
                     >
                       Delete club
                     </button>
@@ -750,7 +751,7 @@ function ClubModal({
                       <button
                         onClick={() => setDeleteConfirm(false)}
                         disabled={deleting}
-                        className="rounded-xl border border-red-200 bg-white px-4 py-2 text-sm font-semibold text-red-600 transition hover:bg-red-100 disabled:opacity-60"
+                        className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-600 transition hover:bg-slate-100 disabled:opacity-60"
                       >
                         Cancel
                       </button>
@@ -831,7 +832,7 @@ function ClubModal({
                                   title={isAssignedClubAdmin ? "Remove club admin" : "Make club admin"}
                                   className={`rounded-lg px-2.5 py-1 text-xs font-semibold transition ${
                                     isAssignedClubAdmin
-                                      ? "bg-purple-50 text-purple-700 hover:bg-purple-100"
+                                      ? "bg-red-600 text-white hover:bg-red-700"
                                       : "bg-slate-100 text-slate-600 hover:bg-purple-50 hover:text-purple-700"
                                   }`}
                                 >
@@ -840,7 +841,7 @@ function ClubModal({
                                 <button
                                   onClick={() => handleRemoveMember(m)}
                                   title="Remove from club"
-                                  className="rounded-lg p-1.5 text-slate-400 transition hover:bg-red-50 hover:text-red-500"
+                                  className="rounded-lg border border-red-600 bg-red-600 p-1.5 text-white shadow-sm transition hover:bg-red-700"
                                 >
                                   <svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
                                     <polyline points="3 6 5 6 21 6" /><path d="M19 6l-1 14H6L5 6" />
@@ -887,7 +888,7 @@ function ClubCard({ club, onClick }: { club: Club; onClick: () => void }) {
             <div className="min-w-0">
             {club.category && (
               <span className="mb-1 inline-block rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-medium text-slate-600">
-                {club.category}
+                {formatTagLabel(club.category)}
               </span>
             )}
             <h3 className="text-sm font-semibold leading-snug text-slate-900 group-hover:text-[#1e3a8a]">

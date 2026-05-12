@@ -8,6 +8,7 @@ import {
   normalizeEventCategory,
 } from "../../../lib/eventCategories";
 import { supabase } from "../../../lib/supabase";
+import { formatTagLabel } from "../../../lib/tagLabels";
 
 type ClubEvent = {
   id: string;
@@ -668,7 +669,7 @@ export default function ClubAdminEventsPage() {
                   <button
                     type="button"
                     onClick={() => setForm((current) => ({ ...current, image_url: "" }))}
-                    className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-600 transition hover:bg-slate-100"
+                    className="rounded-xl border border-red-300 bg-red-50 px-4 py-2.5 text-sm font-semibold text-red-700 transition hover:bg-red-100"
                   >
                     Remove image
                   </button>
@@ -901,7 +902,7 @@ export default function ClubAdminEventsPage() {
                           statusStyles[status] ?? "bg-slate-100 text-slate-600 ring-slate-200"
                         }`}
                       >
-                        {status}
+                        {formatTagLabel(status)}
                       </span>
                       {event.is_club_members_only && (
                         <span className="rounded-full bg-blue-50 px-2.5 py-1 text-xs font-semibold text-blue-700 ring-1 ring-inset ring-blue-200">
@@ -1037,13 +1038,13 @@ export default function ClubAdminEventsPage() {
                     >
                       Edit
                     </button>
-                    <button
-                      onClick={() => handleDelete(event.id)}
-                      disabled={deletingId === event.id}
-                      className="rounded-xl border border-red-200 px-4 py-2 text-sm font-medium text-red-600 transition hover:bg-red-50 disabled:opacity-50"
-                    >
-                      {deletingId === event.id ? "Deleting..." : "Delete"}
-                    </button>
+                      <button
+                        onClick={() => handleDelete(event.id)}
+                        disabled={deletingId === event.id}
+                        className="rounded-xl border border-red-600 bg-red-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-red-700 disabled:opacity-50"
+                      >
+                        {deletingId === event.id ? "Deleting..." : "Delete"}
+                      </button>
                   </div>
                 </div>
               );

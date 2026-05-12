@@ -12,6 +12,7 @@ import {
   uncacheJoinedClubSummary,
 } from "../../../lib/clubMembership";
 import { supabase } from "../../../lib/supabase";
+import { formatTagLabel } from "../../../lib/tagLabels";
 
 type ClubRow = {
   id: string;
@@ -440,7 +441,7 @@ export default function ClubDetailsPage() {
               <div>
                 <div className="flex flex-wrap gap-2">
                   <span className="rounded-full border border-slate-200 bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700">
-                    {club.category || "Club"}
+                    {formatTagLabel(club.category) || "Club"}
                   </span>
                   <span className="rounded-full border border-[#c7d5fb] bg-[#eef3ff] px-3 py-1 text-xs font-semibold text-[#1e3a8a]">
                     {memberCount} member{memberCount !== 1 ? "s" : ""}
@@ -467,7 +468,7 @@ export default function ClubDetailsPage() {
                     type="button"
                     onClick={handleLeaveClub}
                     disabled={actionLoading}
-                    className="rounded-lg border border-red-200 bg-red-50 px-4 py-2 text-sm font-semibold text-red-600 transition hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-60"
+                    className="rounded-lg border border-red-600 bg-red-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-60"
                   >
                     {actionLoading ? "Leaving..." : "Leave club"}
                   </button>
@@ -624,7 +625,7 @@ export default function ClubDetailsPage() {
                       <div>
                         <div className="flex flex-wrap gap-2">
                           <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700">
-                            {event.category || "Event"}
+                            {formatTagLabel(event.category) || "Event"}
                           </span>
                           <span className="rounded-full border border-[#c7d5fb] bg-[#eef3ff] px-3 py-1 text-xs font-semibold text-[#1e3a8a]">
                             {event.is_team_based ? "Team based" : "Solo based"}
