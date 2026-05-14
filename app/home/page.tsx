@@ -579,24 +579,26 @@ export default function HomePage() {
           </section>
         </div>
 
-        <div className="mt-6 grid gap-6 xl:grid-cols-[minmax(0,1.35fr)_480px] 2xl:grid-cols-[minmax(0,1.45fr)_560px]">
-          <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:rounded-[28px] sm:p-6">
-            <div className="flex items-start justify-between gap-4">
-              <div>
-                <h2 className="text-lg font-bold text-slate-950 sm:text-xl">Open registration events</h2>
-                <p className="mt-1 text-sm text-slate-500">
+        <div className="mt-6 grid min-w-0 gap-4 sm:gap-6 xl:grid-cols-[minmax(0,1.35fr)_480px] 2xl:grid-cols-[minmax(0,1.45fr)_560px]">
+          <section className="min-w-0 overflow-hidden rounded-2xl border border-slate-200 bg-white p-3 shadow-sm sm:rounded-[28px] sm:p-6">
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <h2 className="max-w-full break-words text-base font-bold leading-tight text-slate-950 sm:text-xl">
+                  Open registration events
+                </h2>
+                <p className="mt-1 text-xs leading-5 text-slate-500 sm:text-sm">
                   Events students can still join.
                 </p>
               </div>
               <Link
                 href="/events"
-                className="shrink-0 text-sm font-semibold text-[#1e3a8a] hover:underline"
+                className="shrink-0 text-xs font-semibold text-[#1e3a8a] hover:underline sm:text-sm"
               >
                 View all
               </Link>
             </div>
 
-            <div className="mt-5 grid gap-3 2xl:grid-cols-2">
+            <div className="mt-4 grid min-w-0 gap-3 sm:mt-5 2xl:grid-cols-2">
               {events.length > 0 ? (
                 events.map((event) => {
                   const timeLabel =
@@ -608,31 +610,31 @@ export default function HomePage() {
                     <Link
                       key={event.id}
                       href={`/events/${event.id}`}
-                      className="block min-w-0 rounded-2xl border border-slate-200 p-4 transition hover:border-[#1e3a8a]/40 hover:bg-slate-50"
+                      className="block w-full min-w-0 max-w-full overflow-hidden rounded-2xl border border-slate-200 p-3 transition hover:border-[#1e3a8a]/40 hover:bg-slate-50 sm:p-4"
                     >
-                      <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-                        <div>
-                          <div className="flex flex-wrap gap-2">
-                            <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700">
+                      <div className="flex min-w-0 flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                        <div className="min-w-0">
+                          <div className="flex min-w-0 flex-wrap gap-2">
+                            <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-semibold text-slate-700 sm:px-3 sm:text-xs">
                               {inferEventCategory(
                                 event.category,
                                 event.title,
                                 event.description
                               )}
                             </span>
-                            <span className="rounded-full border border-[#c7d5fb] bg-[#eef3ff] px-3 py-1 text-xs font-semibold text-[#1e3a8a]">
+                            <span className="rounded-full border border-[#c7d5fb] bg-[#eef3ff] px-2.5 py-1 text-[11px] font-semibold text-[#1e3a8a] sm:px-3 sm:text-xs">
                               {event.is_team_based ? "Team based" : "Solo based"}
                             </span>
                           </div>
-                          <h3 className="mt-3 text-base font-bold leading-snug text-slate-950">
+                          <h3 className="mt-3 line-clamp-2 max-w-full break-words text-sm font-bold leading-snug text-slate-950 sm:text-base">
                             {event.title || "Untitled event"}
                           </h3>
-                          <p className="mt-2 line-clamp-2 text-sm leading-6 text-slate-500">
+                          <p className="mt-2 line-clamp-2 text-xs leading-5 text-slate-500 sm:text-sm sm:leading-6">
                             {event.description || "No description added."}
                           </p>
                         </div>
 
-                        <div className="rounded-lg bg-slate-100 px-4 py-3 text-sm text-slate-700 md:shrink-0">
+                        <div className="min-w-0 rounded-lg bg-slate-100 px-3 py-3 text-xs text-slate-700 sm:text-sm md:shrink-0">
                           <p className="font-semibold">{formatDate(event.event_date)}</p>
                           <p className="mt-1 text-xs text-slate-500">{timeLabel}</p>
                         </div>
