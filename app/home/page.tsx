@@ -580,17 +580,17 @@ export default function HomePage() {
         </div>
 
         <div className="mt-6 grid gap-6 xl:grid-cols-[minmax(0,1.35fr)_480px] 2xl:grid-cols-[minmax(0,1.45fr)_560px]">
-          <section className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm">
-            <div className="flex items-center justify-between gap-4">
+          <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:rounded-[28px] sm:p-6">
+            <div className="flex items-start justify-between gap-4">
               <div>
-                <h2 className="text-xl font-bold text-slate-950">Open registration events</h2>
+                <h2 className="text-lg font-bold text-slate-950 sm:text-xl">Open registration events</h2>
                 <p className="mt-1 text-sm text-slate-500">
                   Events students can still join.
                 </p>
               </div>
               <Link
                 href="/events"
-                className="text-sm font-semibold text-[#1e3a8a] hover:underline"
+                className="shrink-0 text-sm font-semibold text-[#1e3a8a] hover:underline"
               >
                 View all
               </Link>
@@ -608,7 +608,7 @@ export default function HomePage() {
                     <Link
                       key={event.id}
                       href={`/events/${event.id}`}
-                      className="block rounded-2xl border border-slate-200 p-4 transition hover:border-[#1e3a8a]/40 hover:bg-slate-50"
+                      className="block min-w-0 rounded-2xl border border-slate-200 p-4 transition hover:border-[#1e3a8a]/40 hover:bg-slate-50"
                     >
                       <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
                         <div>
@@ -624,7 +624,7 @@ export default function HomePage() {
                               {event.is_team_based ? "Team based" : "Solo based"}
                             </span>
                           </div>
-                          <h3 className="mt-3 font-bold text-slate-950">
+                          <h3 className="mt-3 text-base font-bold leading-snug text-slate-950">
                             {event.title || "Untitled event"}
                           </h3>
                           <p className="mt-2 line-clamp-2 text-sm leading-6 text-slate-500">
@@ -632,7 +632,7 @@ export default function HomePage() {
                           </p>
                         </div>
 
-                        <div className="shrink-0 rounded-lg bg-slate-100 px-4 py-3 text-sm text-slate-700">
+                        <div className="rounded-lg bg-slate-100 px-4 py-3 text-sm text-slate-700 md:shrink-0">
                           <p className="font-semibold">{formatDate(event.event_date)}</p>
                           <p className="mt-1 text-xs text-slate-500">{timeLabel}</p>
                         </div>

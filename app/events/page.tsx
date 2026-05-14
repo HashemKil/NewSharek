@@ -930,11 +930,11 @@ export default function EventsPage() {
     Boolean(dateTo);
 
   return (
-    <main className="min-h-screen bg-slate-50">
+    <main className="min-h-screen overflow-x-hidden bg-slate-50">
       <AppNavbar />
 
-      <section className="mx-auto max-w-[1800px] px-4 py-6 sm:px-6 lg:px-8 xl:px-10 2xl:px-12">
-        <div className="rounded-[24px] border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+      <section className="mx-auto w-full max-w-[1800px] px-3 py-5 sm:px-6 sm:py-6 lg:px-8 xl:px-10 2xl:px-12">
+        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:rounded-[24px] sm:p-6">
           <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
             <div>
               <h1 className="text-2xl font-semibold text-slate-900">Events</h1>
@@ -1113,7 +1113,7 @@ export default function EventsPage() {
 
         {!loading && !error && (
           <>
-          <section className="mt-6 rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+          <section className="mt-6 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:rounded-[28px] sm:p-6">
             <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
               <div>
                 <h2 className="text-xl font-semibold text-slate-900">
@@ -1135,7 +1135,7 @@ export default function EventsPage() {
                     key={event.id}
                     type="button"
                     onClick={() => router.push(`/events/${event.id}`)}
-                    className="rounded-3xl border border-sky-100 bg-sky-50/50 p-5 text-left transition hover:border-[#1e3a8a]/30 hover:bg-white hover:shadow-md focus:outline-none focus:ring-4 focus:ring-[#1e3a8a]/10"
+                    className="rounded-2xl border border-sky-100 bg-sky-50/50 p-4 text-left transition hover:border-[#1e3a8a]/30 hover:bg-white hover:shadow-md focus:outline-none focus:ring-4 focus:ring-[#1e3a8a]/10 sm:rounded-3xl sm:p-5"
                   >
                     <div className="flex flex-wrap items-center gap-2">
                       <span className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-slate-700">
@@ -1187,8 +1187,8 @@ export default function EventsPage() {
             )}
           </section>
 
-          <div className="mt-6 rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
-            <div className="mb-5 flex items-center justify-between">
+          <div className="mt-6 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:rounded-[28px] sm:p-6">
+            <div className="mb-5 flex items-start justify-between gap-3">
               <div>
                 <h2 className="text-xl font-semibold text-slate-900">
                   Events
@@ -1310,7 +1310,7 @@ export default function EventsPage() {
               </div>
             </div>
 
-            <div className="grid gap-4 2xl:grid-cols-2">
+            <div className="grid min-w-0 gap-4 2xl:grid-cols-2">
               {selectedEvents.length > 0 ? (
                 selectedEvents.map((event) => {
                   const isJoined = joinedEvents.includes(event.id);
@@ -1335,17 +1335,17 @@ export default function EventsPage() {
                           openEventDetails(event.id, keyEvent.target);
                         }
                       }}
-                      className="cursor-pointer rounded-3xl border border-slate-200 bg-white p-5 transition hover:border-[#1e3a8a]/30 hover:shadow-md focus:outline-none focus:ring-4 focus:ring-[#1e3a8a]/10"
+                      className="min-w-0 cursor-pointer rounded-2xl border border-slate-200 bg-white p-4 transition hover:border-[#1e3a8a]/30 hover:shadow-md focus:outline-none focus:ring-4 focus:ring-[#1e3a8a]/10 sm:rounded-3xl sm:p-5"
                     >
                       {event.image_url && (
                         <img
                           src={event.image_url}
                           alt={event.title}
-                          className="mb-5 h-64 w-full rounded-2xl object-cover"
+                          className="mb-5 h-44 w-full rounded-2xl object-cover sm:h-64"
                         />
                       )}
                       <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
-                        <div className="flex-1">
+                        <div className="min-w-0 flex-1">
                           <div className="flex flex-wrap items-center gap-2">
                             <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700">
                               {formatTagLabel(event.category)}
@@ -1396,7 +1396,7 @@ export default function EventsPage() {
                             )}
                           </div>
 
-                          <h3 className="mt-3 text-xl font-semibold text-slate-900">
+                          <h3 className="mt-3 break-words text-lg font-semibold leading-snug text-slate-900 sm:text-xl">
                             {event.title}
                           </h3>
 
@@ -1453,7 +1453,7 @@ export default function EventsPage() {
                           </div>
                         </div>
 
-                        <div className="flex items-center gap-3">
+                        <div className="flex flex-wrap items-center gap-3">
                           <Link
                             href={`/events/${event.id}`}
                             className="rounded-2xl border border-slate-200 px-4 py-2.5 text-sm font-medium text-slate-700 transition hover:bg-slate-100"
