@@ -39,3 +39,28 @@ canvas,
 svg {
   max-width: 100%;
 }
+
+@media (max-width: 767px) {
+  .mobile-screen-safe {
+    width: 100%;
+    max-width: calc(100vw - 1.5rem);
+    min-width: 0;
+    overflow-x: hidden;
+  }
+
+  .mobile-screen-safe > * {
+    max-width: 100%;
+    min-width: 0;
+  }
+
+  .mobile-card-safe {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    overflow: hidden;
+  }
+
+  .mobile-card-safe * {
+    min-width: 0;
+  }
+}

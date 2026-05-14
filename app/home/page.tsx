@@ -424,11 +424,11 @@ export default function HomePage() {
   }
 
   return (
-    <main className="min-h-screen bg-slate-50">
+    <main className="min-h-screen overflow-x-hidden bg-slate-50">
       <AppNavbar />
 
-      <section className="mx-auto w-full max-w-[calc(100vw-1.5rem)] px-0 py-5 sm:max-w-[1800px] sm:px-6 sm:py-6 lg:px-8 xl:px-10 2xl:px-12">
-        <div className="grid min-w-0 gap-4 sm:gap-6 xl:grid-cols-[minmax(0,1.55fr)_430px] 2xl:grid-cols-[minmax(0,1.7fr)_500px]">
+      <section className="mobile-screen-safe mx-auto w-full max-w-[calc(100vw-1.5rem)] px-0 py-5 sm:max-w-[1800px] sm:px-6 sm:py-6 lg:px-8 xl:px-10 2xl:px-12">
+        <div className="mobile-screen-safe grid min-w-0 gap-4 sm:gap-6 xl:grid-cols-[minmax(0,1.55fr)_430px] 2xl:grid-cols-[minmax(0,1.7fr)_500px]">
           <section className="min-w-0 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm sm:rounded-[28px]">
             <div
               className="relative flex min-h-[560px] flex-col justify-end bg-cover bg-center p-5 text-white sm:p-8 xl:min-h-[620px]"
@@ -579,8 +579,8 @@ export default function HomePage() {
           </section>
         </div>
 
-        <div className="mt-6 grid w-full min-w-0 max-w-full gap-4 overflow-hidden sm:gap-6 xl:grid-cols-[minmax(0,1.35fr)_480px] 2xl:grid-cols-[minmax(0,1.45fr)_560px]">
-          <section className="min-w-0 overflow-hidden rounded-2xl border border-slate-200 bg-white p-3 shadow-sm sm:rounded-[28px] sm:p-6">
+        <div className="mobile-screen-safe mt-6 grid w-full min-w-0 max-w-full gap-4 overflow-hidden sm:gap-6 xl:grid-cols-[minmax(0,1.35fr)_480px] 2xl:grid-cols-[minmax(0,1.45fr)_560px]">
+          <section className="mobile-card-safe min-w-0 overflow-hidden rounded-2xl border border-slate-200 bg-white p-3 shadow-sm sm:rounded-[28px] sm:p-6">
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0">
                 <h2 className="max-w-full break-words text-base font-bold leading-tight text-slate-950 sm:text-xl">
@@ -598,7 +598,7 @@ export default function HomePage() {
               </Link>
             </div>
 
-            <div className="mt-4 grid min-w-0 gap-3 sm:mt-5 2xl:grid-cols-2">
+            <div className="mobile-screen-safe mt-4 grid min-w-0 gap-3 sm:mt-5 2xl:grid-cols-2">
               {events.length > 0 ? (
                 events.map((event) => {
                   const timeLabel =
@@ -610,7 +610,7 @@ export default function HomePage() {
                     <Link
                       key={event.id}
                       href={`/events/${event.id}`}
-                      className="block w-full min-w-0 max-w-full overflow-hidden rounded-2xl border border-slate-200 p-3 transition hover:border-[#1e3a8a]/40 hover:bg-slate-50 sm:p-4"
+                      className="mobile-card-safe block w-full min-w-0 max-w-full overflow-hidden rounded-2xl border border-slate-200 p-3 transition hover:border-[#1e3a8a]/40 hover:bg-slate-50 sm:p-4"
                     >
                       <div className="flex min-w-0 flex-col gap-3 md:flex-row md:items-start md:justify-between">
                         <div className="min-w-0">
@@ -634,7 +634,7 @@ export default function HomePage() {
                           </p>
                         </div>
 
-                        <div className="min-w-0 rounded-lg bg-slate-100 px-3 py-3 text-xs text-slate-700 sm:text-sm md:shrink-0">
+                        <div className="w-full min-w-0 rounded-lg bg-slate-100 px-3 py-3 text-xs text-slate-700 sm:text-sm md:w-auto md:shrink-0">
                           <p className="font-semibold">{formatDate(event.event_date)}</p>
                           <p className="mt-1 text-xs text-slate-500">{timeLabel}</p>
                         </div>
@@ -650,8 +650,8 @@ export default function HomePage() {
             </div>
           </section>
 
-          <div className="h-full min-w-0 max-w-full overflow-hidden">
-            <section className="min-h-[520px] min-w-0 max-w-full overflow-hidden rounded-2xl border border-slate-200 bg-white p-3 shadow-sm sm:rounded-[28px] sm:p-6">
+          <div className="mobile-card-safe h-full min-w-0 max-w-full overflow-hidden">
+            <section className="mobile-card-safe min-h-[520px] min-w-0 max-w-full overflow-hidden rounded-2xl border border-slate-200 bg-white p-3 shadow-sm sm:rounded-[28px] sm:p-6">
               <div className="flex items-center justify-between gap-3">
                 <h2 className="min-w-0 text-lg font-bold text-slate-950 sm:text-xl">Clubs</h2>
                 <Link

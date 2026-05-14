@@ -8,7 +8,6 @@ import { supabase } from "../../lib/supabase";
 import { formatTagLabel } from "../../lib/tagLabels";
 
 type Stats = {
-  totalClubs: number;
   totalEvents: number;
   pendingEvents: number;
   totalMembers: number;
@@ -41,13 +40,15 @@ const StatCard = ({
   value,
   color,
   icon,
+  href,
 }: {
   label: string;
   value: number | string;
   color: string;
   icon: React.ReactNode;
-}) => (
-  <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+  href?: string;
+}) => {
+  const content = (
     <div className="flex items-start justify-between">
       <div>
         <p className="text-sm font-medium text-slate-500">{label}</p>
@@ -55,8 +56,19 @@ const StatCard = ({
       </div>
       <div className={`rounded-xl p-3 ${color}`}>{icon}</div>
     </div>
-  </div>
-);
+  );
+
+  const className =
+    "block rounded-2xl border border-slate-200 bg-white p-6 shadow-sm transition hover:border-[#1e3a8a]/50 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-[#1e3a8a]/20";
+
+  return href ? (
+    <Link href={href} className={className}>
+      {content}
+    </Link>
+  ) : (
+    <div className={className}>{content}</div>
+  );
+};
 
 const statusColors: Record<string, string> = {
   approved: "bg-green-50 text-green-700",
@@ -66,7 +78,6 @@ const statusColors: Record<string, string> = {
 
 export default function ClubAdminDashboard() {
   const [stats, setStats] = useState<Stats>({
-    totalClubs: 0,
     totalEvents: 0,
     pendingEvents: 0,
     totalMembers: 0,
@@ -88,7 +99,6 @@ export default function ClubAdminDashboard() {
         if (userError || !user) {
           setManagedClub(null);
           setStats({
-            totalClubs: 0,
             totalEvents: 0,
             pendingEvents: 0,
             totalMembers: 0,
@@ -103,7 +113,6 @@ export default function ClubAdminDashboard() {
         if (context.error || !managedClubData?.id) {
           setManagedClub(null);
           setStats({
-            totalClubs: 0,
             totalEvents: 0,
             pendingEvents: 0,
             totalMembers: 0,
@@ -131,7 +140,6 @@ export default function ClubAdminDashboard() {
             ?.member_count ?? 0;
 
         setStats({
-          totalClubs: 1,
           totalEvents: events.length,
           pendingEvents: events.filter(
             (event) => (event.approval_status ?? "approved") === "pending"
@@ -182,7 +190,7 @@ export default function ClubAdminDashboard() {
 
       {loading ? (
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-          {[...Array(4)].map((_, i) => (
+          {[...Array(3)].map((_, i) => (
             <div key={i} className="h-28 animate-pulse rounded-2xl bg-slate-200" />
           ))}
         </div>
@@ -192,6 +200,7 @@ export default function ClubAdminDashboard() {
             label="Club Events"
             value={stats.totalEvents}
             color="bg-indigo-50"
+            href="/club-admin/events"
             icon={
               <svg width="20" height="20" fill="none" stroke="#4f46e5" strokeWidth="2" viewBox="0 0 24 24">
                 <rect x="3" y="4" width="18" height="18" rx="2" />
@@ -203,6 +212,7 @@ export default function ClubAdminDashboard() {
             label="Pending Events"
             value={stats.pendingEvents}
             color="bg-amber-50"
+            href="/club-admin/events"
             icon={
               <svg width="20" height="20" fill="none" stroke="#d97706" strokeWidth="2" viewBox="0 0 24 24">
                 <circle cx="12" cy="12" r="10" />
@@ -214,6 +224,7 @@ export default function ClubAdminDashboard() {
             label="Club Members"
             value={stats.totalMembers}
             color="bg-emerald-50"
+            href="/club-admin/members"
             icon={
               <svg width="20" height="20" fill="none" stroke="#059669" strokeWidth="2" viewBox="0 0 24 24">
                 <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
@@ -224,51 +235,6 @@ export default function ClubAdminDashboard() {
           />
         </div>
       )}
-
-      <div className="mt-8 grid gap-4 sm:grid-cols-2 2xl:grid-cols-4">
-        <Link
-          href="/club-admin/members"
-          className="flex items-center gap-4 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm transition hover:border-[#1e3a8a] hover:shadow-md"
-        >
-          <div className="rounded-xl bg-blue-50 p-3">
-            <svg width="22" height="22" fill="none" stroke="#1e3a8a" strokeWidth="2" viewBox="0 0 24 24">
-              <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
-              <circle cx="9" cy="7" r="4" />
-              <path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75" />
-            </svg>
-          </div>
-          <div>
-            <p className="font-semibold text-slate-900">Manage Members</p>
-            <p className="text-sm text-slate-500">
-              View your club roster and remove members when needed
-            </p>
-          </div>
-          <svg className="ml-auto text-slate-300" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-            <path d="M9 18l6-6-6-6" />
-          </svg>
-        </Link>
-
-        <Link
-          href="/club-admin/events"
-          className="flex items-center gap-4 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm transition hover:border-[#1e3a8a] hover:shadow-md"
-        >
-          <div className="rounded-xl bg-indigo-50 p-3">
-            <svg width="22" height="22" fill="none" stroke="#4f46e5" strokeWidth="2" viewBox="0 0 24 24">
-              <rect x="3" y="4" width="18" height="18" rx="2" />
-              <path d="M16 2v4M8 2v4M3 10h18" />
-            </svg>
-          </div>
-          <div>
-            <p className="font-semibold text-slate-900">Manage Events</p>
-            <p className="text-sm text-slate-500">
-              Create club events and send them to admin approval
-            </p>
-          </div>
-          <svg className="ml-auto text-slate-300" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-            <path d="M9 18l6-6-6-6" />
-          </svg>
-        </Link>
-      </div>
 
       <div className="mt-8 rounded-2xl border border-slate-200 bg-white shadow-sm">
         <div className="flex items-center justify-between border-b border-slate-200 px-6 py-4">
