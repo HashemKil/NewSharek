@@ -401,7 +401,7 @@ export default function HomePage() {
     return (
       <main className="min-h-screen bg-slate-50">
         <AppNavbar />
-        <section className="mx-auto max-w-[1800px] px-4 py-8 sm:px-6 lg:px-8 xl:px-10 2xl:px-12">
+        <section className="mx-auto max-w-[1800px] px-3 py-6 sm:px-6 sm:py-8 lg:px-8 xl:px-10 2xl:px-12">
           <div className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm">
             <p className="text-sm text-slate-500">Loading home...</p>
           </div>
@@ -414,7 +414,7 @@ export default function HomePage() {
     return (
       <main className="min-h-screen bg-slate-50">
         <AppNavbar />
-        <section className="mx-auto max-w-[1800px] px-4 py-8 sm:px-6 lg:px-8 xl:px-10 2xl:px-12">
+        <section className="mx-auto max-w-[1800px] px-3 py-6 sm:px-6 sm:py-8 lg:px-8 xl:px-10 2xl:px-12">
           <div className="rounded-[28px] border border-red-200 bg-red-50 p-6 text-sm text-red-600 shadow-sm">
             {error}
           </div>
@@ -427,11 +427,11 @@ export default function HomePage() {
     <main className="min-h-screen bg-slate-50">
       <AppNavbar />
 
-      <section className="mx-auto max-w-[1800px] px-4 py-6 sm:px-6 lg:px-8 xl:px-10 2xl:px-12">
-        <div className="grid gap-6 xl:grid-cols-[minmax(0,1.55fr)_430px] 2xl:grid-cols-[minmax(0,1.7fr)_500px]">
-          <section className="overflow-hidden rounded-[28px] border border-slate-200 bg-white shadow-sm">
+      <section className="mx-auto w-full max-w-[1800px] px-3 py-5 sm:px-6 sm:py-6 lg:px-8 xl:px-10 2xl:px-12">
+        <div className="grid min-w-0 gap-4 sm:gap-6 xl:grid-cols-[minmax(0,1.55fr)_430px] 2xl:grid-cols-[minmax(0,1.7fr)_500px]">
+          <section className="min-w-0 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm sm:rounded-[28px]">
             <div
-              className="relative flex min-h-[560px] flex-col justify-end bg-cover bg-center p-6 text-white sm:p-8 xl:min-h-[620px]"
+              className="relative flex min-h-[560px] flex-col justify-end bg-cover bg-center p-5 text-white sm:p-8 xl:min-h-[620px]"
               style={{ backgroundImage: `url(${activeNews.image})` }}
             >
               <div className="absolute inset-0 bg-gradient-to-t from-slate-950/85 via-slate-950/40 to-slate-950/10" />
@@ -441,7 +441,7 @@ export default function HomePage() {
                     type="button"
                     onClick={goToPreviousNews}
                     aria-label="Previous news"
-                    className="absolute left-4 top-1/2 z-10 flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full border border-white/30 bg-slate-950/35 text-2xl font-semibold text-white shadow-sm backdrop-blur transition hover:bg-white hover:text-[#1e3a8a] focus:outline-none focus:ring-2 focus:ring-white/70"
+                    className="absolute left-3 top-1/2 z-10 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full border border-white/30 bg-slate-950/35 text-xl font-semibold text-white shadow-sm backdrop-blur transition hover:bg-white hover:text-[#1e3a8a] focus:outline-none focus:ring-2 focus:ring-white/70 sm:left-4 sm:h-11 sm:w-11 sm:text-2xl"
                   >
                     &lt;
                   </button>
@@ -449,13 +449,13 @@ export default function HomePage() {
                     type="button"
                     onClick={goToNextNews}
                     aria-label="Next news"
-                    className="absolute right-4 top-1/2 z-10 flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full border border-white/30 bg-slate-950/35 text-2xl font-semibold text-white shadow-sm backdrop-blur transition hover:bg-white hover:text-[#1e3a8a] focus:outline-none focus:ring-2 focus:ring-white/70"
+                    className="absolute right-3 top-1/2 z-10 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full border border-white/30 bg-slate-950/35 text-xl font-semibold text-white shadow-sm backdrop-blur transition hover:bg-white hover:text-[#1e3a8a] focus:outline-none focus:ring-2 focus:ring-white/70 sm:right-4 sm:h-11 sm:w-11 sm:text-2xl"
                   >
                     &gt;
                   </button>
                 </>
               )}
-              <div className="relative max-w-3xl pl-12 sm:pl-14">
+              <div className="relative max-w-3xl pl-12 pr-10 sm:pl-14 sm:pr-0">
                 <div className="flex flex-wrap items-center gap-2">
                   <span className="rounded-full bg-white/90 px-3 py-1 text-xs font-semibold uppercase text-[#1e3a8a]">
                     PSUT news
@@ -464,10 +464,10 @@ export default function HomePage() {
                     {activeNews.label}
                   </span>
                 </div>
-                <h1 className="mt-4 text-4xl font-bold leading-tight text-white sm:text-5xl">
+                <h1 className="mt-4 text-3xl font-bold leading-tight text-white sm:text-5xl">
                   {activeNews.title}
                 </h1>
-                <p className="mt-4 max-w-2xl text-base leading-7 text-white/85">
+                <p className="mt-4 max-w-2xl text-sm leading-6 text-white/85 sm:text-base sm:leading-7">
                   {activeNews.body}
                 </p>
                 {activeNewsUrl && (
@@ -500,17 +500,17 @@ export default function HomePage() {
             </div>
           </section>
 
-          <section className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm lg:p-7">
+          <section className="min-w-0 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:rounded-[28px] sm:p-6 lg:p-7">
             <div className="flex h-full flex-col gap-6">
               <div className="flex items-center gap-4">
-                <div className="flex h-20 w-20 shrink-0 items-center justify-center rounded-2xl bg-[#eef3ff] text-3xl font-bold text-[#1e3a8a]">
+                <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl bg-[#eef3ff] text-2xl font-bold text-[#1e3a8a] sm:h-20 sm:w-20 sm:text-3xl">
                   {initials}
                 </div>
                 <div>
                   <p className="text-sm font-semibold uppercase text-[#1e3a8a]">
                     Home
                   </p>
-                  <h2 className="mt-1 text-2xl font-bold text-slate-950">
+                  <h2 className="mt-1 text-xl font-bold text-slate-950 sm:text-2xl">
                     Welcome back, {firstName}
                   </h2>
                   <p className="mt-2 text-sm text-slate-500">

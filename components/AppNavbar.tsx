@@ -99,18 +99,18 @@ export default function AppNavbar() {
   };
 
   return (
-    <header className="sticky top-0 z-50 border-b border-gray-200 bg-white/90 backdrop-blur">
-      <div className="mx-auto flex max-w-[1800px] items-center justify-between px-4 py-4 sm:px-6 lg:px-8 xl:px-10 2xl:px-12">
+    <header className="sticky top-0 z-50 w-full overflow-x-hidden border-b border-gray-200 bg-white/90 backdrop-blur">
+      <div className="mx-auto flex max-w-[1800px] flex-col gap-3 px-4 py-3 sm:px-6 md:flex-row md:items-center md:justify-between lg:px-8 xl:px-10 2xl:px-12">
 
         {/* Logo */}
-        <Link href="/home" className="flex items-center">
+        <Link href="/home" className="flex w-fit items-center">
           <Image
             src="/brand/sharek-logo-cropped.png"
             alt="Sharek"
             width={210}
             height={80}
             priority
-            className="h-12 w-auto object-contain"
+            className="h-9 w-auto object-contain sm:h-10 md:h-12"
           />
         </Link>
         <div className="sr-only">
@@ -121,7 +121,7 @@ export default function AppNavbar() {
         </div>
 
         {/* Navigation */}
-        <nav className="flex items-center gap-2">
+        <nav className="-mx-1 flex w-full max-w-full items-center gap-1 overflow-x-auto px-1 pb-1 md:mx-0 md:w-auto md:gap-2 md:overflow-visible md:px-0 md:pb-0">
           {navItems.map((item) => {
             const isActive = pathname === item.href;
 
@@ -129,7 +129,7 @@ export default function AppNavbar() {
               <Link
                 key={item.name}
                 href={item.href}
-                className={`rounded-lg px-4 py-2 text-sm font-medium transition ${
+                className={`shrink-0 rounded-lg px-3 py-2 text-sm font-medium transition md:px-4 ${
                   isActive
                     ? "bg-[#eef3ff] text-[#1e3a8a]"
                     : "text-gray-600 hover:bg-gray-100 hover:text-[#1e3a8a]"
@@ -144,7 +144,7 @@ export default function AppNavbar() {
           {isAdmin && (
             <Link
               href="/admin"
-              className={`rounded-lg px-4 py-2 text-sm font-medium transition ${
+              className={`shrink-0 rounded-lg px-3 py-2 text-sm font-medium transition md:px-4 ${
                 pathname.startsWith("/admin")
                   ? "bg-amber-50 text-amber-700"
                   : "text-amber-600 hover:bg-amber-50 hover:text-amber-700"
@@ -157,7 +157,7 @@ export default function AppNavbar() {
           {isClubAdmin && (
             <Link
               href="/club-admin"
-              className={`rounded-lg px-4 py-2 text-sm font-medium transition ${
+              className={`shrink-0 rounded-lg px-3 py-2 text-sm font-medium transition md:px-4 ${
                 pathname.startsWith("/club-admin")
                   ? "bg-emerald-50 text-emerald-700"
                   : "text-emerald-600 hover:bg-emerald-50 hover:text-emerald-700"
@@ -168,12 +168,12 @@ export default function AppNavbar() {
           )}
 
           {/* Divider */}
-          <div className="mx-2 h-6 w-px bg-gray-200" />
+          <div className="mx-1 h-6 w-px shrink-0 bg-gray-200 md:mx-2" />
 
           {/* Logout */}
           <button
             onClick={handleLogout}
-            className="rounded-lg border border-red-200 px-4 py-2 text-sm font-medium text-red-600 transition hover:bg-red-50"
+            className="shrink-0 rounded-lg border border-red-200 px-3 py-2 text-sm font-medium text-red-600 transition hover:bg-red-50 md:px-4"
           >
             Logout
           </button>
