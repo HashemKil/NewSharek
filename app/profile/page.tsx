@@ -1125,10 +1125,10 @@ export default function ProfilePage() {
 
   if (loading) {
     return (
-      <main className="min-h-screen bg-[#f3f5f9]">
+      <main className="min-h-screen overflow-x-hidden bg-[#f3f5f9]">
         <AppNavbar />
-        <section className="mx-auto max-w-[1800px] px-4 py-8 sm:px-6 lg:px-8 xl:px-10 2xl:px-12">
-          <div className="rounded-2xl border border-gray-200 bg-white p-6 text-sm text-gray-600 shadow-sm">
+        <section className="mx-auto w-full max-w-[calc(100vw-1.5rem)] px-0 py-5 sm:max-w-[1800px] sm:px-6 sm:py-8 lg:px-8 xl:px-10 2xl:px-12">
+          <div className="rounded-2xl border border-gray-200 bg-white p-4 text-sm text-gray-600 shadow-sm sm:p-6">
             Loading profile...
           </div>
         </section>
@@ -1138,10 +1138,10 @@ export default function ProfilePage() {
 
   if (error && !profile) {
     return (
-      <main className="min-h-screen bg-[#f3f5f9]">
+      <main className="min-h-screen overflow-x-hidden bg-[#f3f5f9]">
         <AppNavbar />
-        <section className="mx-auto max-w-[1800px] px-4 py-8 sm:px-6 lg:px-8 xl:px-10 2xl:px-12">
-          <div className="rounded-2xl border border-red-200 bg-red-50 p-6 text-sm text-red-600 shadow-sm">
+        <section className="mx-auto w-full max-w-[calc(100vw-1.5rem)] px-0 py-5 sm:max-w-[1800px] sm:px-6 sm:py-8 lg:px-8 xl:px-10 2xl:px-12">
+          <div className="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-600 shadow-sm sm:p-6">
             {error}
           </div>
         </section>
@@ -1150,10 +1150,10 @@ export default function ProfilePage() {
   }
 
   return (
-    <main className="min-h-screen bg-[#f3f5f9]">
+    <main className="min-h-screen overflow-x-hidden bg-[#f3f5f9]">
       <AppNavbar />
 
-      <section className="mx-auto max-w-[1800px] px-4 py-8 sm:px-6 lg:px-8 xl:px-10 2xl:px-12">
+      <section className="mx-auto w-full max-w-[calc(100vw-1.5rem)] px-0 py-5 sm:max-w-[1800px] sm:px-6 sm:py-8 lg:px-8 xl:px-10 2xl:px-12">
         {error && (
           <div className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-600">
             {error}
@@ -1166,11 +1166,11 @@ export default function ProfilePage() {
           </div>
         )}
 
-        <div className="grid gap-6">
-          <div className="w-full rounded-2xl border border-gray-200 bg-white p-6 shadow-sm lg:p-8">
-            <div className="flex flex-col gap-6 lg:flex-row lg:items-center">
-              <div className="flex flex-col items-center gap-3">
-                <div className="relative flex h-28 w-28 items-center justify-center overflow-hidden rounded-full bg-[#e8eefc] text-3xl font-bold text-[#1e3a8a]">
+        <div className="grid w-full min-w-0 max-w-full gap-6 overflow-hidden">
+          <div className="w-full min-w-0 max-w-full overflow-hidden rounded-2xl border border-gray-200 bg-white p-4 shadow-sm sm:p-6 lg:p-8">
+            <div className="flex min-w-0 flex-col gap-5 sm:flex-row sm:items-start lg:items-center">
+              <div className="flex w-full shrink-0 flex-col items-start gap-3 sm:w-auto sm:items-center">
+                <div className="relative flex h-20 w-20 shrink-0 items-center justify-center overflow-hidden rounded-full bg-[#e8eefc] text-2xl font-bold text-[#1e3a8a] sm:h-28 sm:w-28 sm:text-3xl">
                   {avatarUrl ? (
                     <Image
                       src={avatarUrl}
@@ -1207,7 +1207,7 @@ export default function ProfilePage() {
               </div>
 
               <div className="min-w-0 flex-1">
-                <h2 className="text-3xl font-bold text-gray-900">
+                <h2 className="break-words text-2xl font-bold leading-tight text-gray-900 sm:text-3xl">
                   {fullName || profile?.full_name || "Student User"}
                 </h2>
                 <div className="mt-2 flex flex-wrap items-center gap-2">
@@ -1248,7 +1248,7 @@ export default function ProfilePage() {
                     setSuccess("");
                     setError("");
                   }}
-                  className="inline-flex items-center gap-2 rounded-xl bg-[#1e3a8a] px-5 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-[#1e40af] focus:outline-none focus:ring-4 focus:ring-[#1e3a8a]/20 lg:self-start"
+                  className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-[#1e3a8a] px-5 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-[#1e40af] focus:outline-none focus:ring-4 focus:ring-[#1e3a8a]/20 sm:w-auto lg:self-start"
                 >
                   <svg
                     width="16"
@@ -1265,7 +1265,7 @@ export default function ProfilePage() {
                   Edit Profile
                 </button>
               ) : (
-                <div className="flex gap-2">
+                <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
                   <button
                     type="button"
                     onClick={() => {
@@ -1300,7 +1300,7 @@ export default function ProfilePage() {
             </div>
 
             {!editing && (
-              <div className="mt-8 grid gap-3 sm:grid-cols-3">
+              <div className="mt-8 grid min-w-0 gap-3 sm:grid-cols-3">
                 <Link
                   href="/teams"
                   className="rounded-xl bg-[#eef3ff] p-4 transition hover:bg-[#dfe8ff]"

@@ -208,20 +208,28 @@ export default function AdminHistoryPage() {
   const [statusFilter, setStatusFilter] = useState("all");
   const [selectedEvent, setSelectedEvent] = useState<HistoryEvent | null>(null);
   const [page, setPage] = useState(0);
+  const [hasMore, setHasMore] = useState(false);
+  const [error, setError] = useState("");
   const PAGE_SIZE = 50;
 
   const loadEvents = async (offset = 0, append = false) => {
     setLoading(true);
+    setError("");
     const { data, error } = await supabase
       .from("events")
-      .select("id, title, description, category, event_date, location, approval_status, created_at, club_id, clubs(name, title)")
+      .select("id, title, description, category, event_date, location, approval_status, created_at, club_id, clubs(name)")
       .order("event_date", { ascending: false })
       .range(offset, offset + PAGE_SIZE - 1);
 
     if (!error && data) {
       const shaped = (data as unknown as HistoryEvent[]);
       setEvents((prev) => append ? [...prev, ...shaped] : shaped);
+      setHasMore(shaped.length === PAGE_SIZE);
       if (shaped.length === PAGE_SIZE) setPage(offset / PAGE_SIZE + 1);
+    } else if (error) {
+      setError(error.message);
+      setHasMore(false);
+      if (!append) setEvents([]);
     }
     setLoading(false);
   };
@@ -257,6 +265,12 @@ export default function AdminHistoryPage() {
         <h1 className="text-2xl font-bold text-slate-900">Event History</h1>
         <p className="mt-1 text-sm text-slate-500">All events across the entire Sharek platform.</p>
       </div>
+
+      {error && (
+        <div className="mb-6 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-600">
+          {error}
+        </div>
+      )}
 
       {/* Stats */}
       <div className="mb-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
@@ -369,7 +383,7 @@ export default function AdminHistoryPage() {
         )}
 
         {/* Load more */}
-        {!loading && events.length >= PAGE_SIZE * page && events.length > 0 && (
+        {!loading && hasMore && events.length > 0 && (
           <div className="border-t border-slate-100 p-4 text-center">
             <button
               onClick={() => loadEvents(page * PAGE_SIZE, true)}

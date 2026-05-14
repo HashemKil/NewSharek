@@ -401,7 +401,7 @@ export default function HomePage() {
     return (
       <main className="min-h-screen bg-slate-50">
         <AppNavbar />
-        <section className="mx-auto max-w-[1800px] px-3 py-6 sm:px-6 sm:py-8 lg:px-8 xl:px-10 2xl:px-12">
+        <section className="mx-auto w-full max-w-[calc(100vw-1.5rem)] px-0 py-6 sm:max-w-[1800px] sm:px-6 sm:py-8 lg:px-8 xl:px-10 2xl:px-12">
           <div className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm">
             <p className="text-sm text-slate-500">Loading home...</p>
           </div>
@@ -414,7 +414,7 @@ export default function HomePage() {
     return (
       <main className="min-h-screen bg-slate-50">
         <AppNavbar />
-        <section className="mx-auto max-w-[1800px] px-3 py-6 sm:px-6 sm:py-8 lg:px-8 xl:px-10 2xl:px-12">
+        <section className="mx-auto w-full max-w-[calc(100vw-1.5rem)] px-0 py-6 sm:max-w-[1800px] sm:px-6 sm:py-8 lg:px-8 xl:px-10 2xl:px-12">
           <div className="rounded-[28px] border border-red-200 bg-red-50 p-6 text-sm text-red-600 shadow-sm">
             {error}
           </div>
@@ -427,7 +427,7 @@ export default function HomePage() {
     <main className="min-h-screen bg-slate-50">
       <AppNavbar />
 
-      <section className="mx-auto w-full max-w-[1800px] px-3 py-5 sm:px-6 sm:py-6 lg:px-8 xl:px-10 2xl:px-12">
+      <section className="mx-auto w-full max-w-[calc(100vw-1.5rem)] px-0 py-5 sm:max-w-[1800px] sm:px-6 sm:py-6 lg:px-8 xl:px-10 2xl:px-12">
         <div className="grid min-w-0 gap-4 sm:gap-6 xl:grid-cols-[minmax(0,1.55fr)_430px] 2xl:grid-cols-[minmax(0,1.7fr)_500px]">
           <section className="min-w-0 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm sm:rounded-[28px]">
             <div
@@ -579,7 +579,7 @@ export default function HomePage() {
           </section>
         </div>
 
-        <div className="mt-6 grid min-w-0 gap-4 sm:gap-6 xl:grid-cols-[minmax(0,1.35fr)_480px] 2xl:grid-cols-[minmax(0,1.45fr)_560px]">
+        <div className="mt-6 grid w-full min-w-0 max-w-full gap-4 overflow-hidden sm:gap-6 xl:grid-cols-[minmax(0,1.35fr)_480px] 2xl:grid-cols-[minmax(0,1.45fr)_560px]">
           <section className="min-w-0 overflow-hidden rounded-2xl border border-slate-200 bg-white p-3 shadow-sm sm:rounded-[28px] sm:p-6">
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0">
@@ -650,19 +650,19 @@ export default function HomePage() {
             </div>
           </section>
 
-          <div className="h-full">
-            <section className="min-h-[520px] rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm">
-              <div className="flex items-center justify-between gap-4">
-                <h2 className="text-xl font-bold text-slate-950">Clubs</h2>
+          <div className="h-full min-w-0 max-w-full overflow-hidden">
+            <section className="min-h-[520px] min-w-0 max-w-full overflow-hidden rounded-2xl border border-slate-200 bg-white p-3 shadow-sm sm:rounded-[28px] sm:p-6">
+              <div className="flex items-center justify-between gap-3">
+                <h2 className="min-w-0 text-lg font-bold text-slate-950 sm:text-xl">Clubs</h2>
                 <Link
                   href="/clubs"
-                  className="text-sm font-semibold text-[#1e3a8a] hover:underline"
+                  className="shrink-0 text-xs font-semibold text-[#1e3a8a] hover:underline sm:text-sm"
                 >
                   Browse
                 </Link>
               </div>
 
-              <div className="mt-5 space-y-4">
+              <div className="mt-5 min-w-0 space-y-3 sm:space-y-4">
                 {clubs.length > 0 ? (
                   clubs.map((club) => {
                     const logo = club.logo_url || club.image_url || "";
@@ -672,20 +672,20 @@ export default function HomePage() {
                       <Link
                         key={club.id}
                         href={`/clubs/${club.id}`}
-                        className="flex items-center gap-4 rounded-2xl border border-slate-200 p-4"
+                        className="flex min-w-0 max-w-full items-center gap-3 rounded-2xl border border-slate-200 p-3 sm:gap-4 sm:p-4"
                       >
                         {logo ? (
                           <div
                             aria-label={`${clubName} logo`}
-                            className="h-12 w-12 shrink-0 rounded-lg border border-slate-200 bg-cover bg-center"
+                            className="h-11 w-11 shrink-0 rounded-lg border border-slate-200 bg-cover bg-center sm:h-12 sm:w-12"
                             style={{ backgroundImage: `url(${logo})` }}
                           />
                         ) : (
-                          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg bg-[#eef3ff] font-bold text-[#1e3a8a]">
+                          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-[#eef3ff] font-bold text-[#1e3a8a] sm:h-12 sm:w-12">
                             {clubName.slice(0, 1).toUpperCase()}
                           </div>
                         )}
-                        <div className="min-w-0">
+                        <div className="min-w-0 flex-1">
                           <p className="truncate font-semibold text-slate-900">{clubName}</p>
                           <p className="text-xs text-slate-500">
                             {formatTagLabel(club.category) || "Club"}
