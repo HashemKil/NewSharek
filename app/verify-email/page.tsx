@@ -132,6 +132,23 @@ export default function VerifyEmailPage() {
     setError("");
     setSuccess("");
 
+    const statusResponse = await fetch("/api/auth-email-status", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email: cleanEmail }),
+    });
+    const status = (await statusResponse.json().catch(() => null)) as
+      | { found?: boolean; confirmed?: boolean; statusKnown?: boolean; error?: string }
+      | null;
+
+    if (status?.confirmed) {
+      setError(
+        "Supabase says this auth account is already confirmed, so it will not send a signup verification email. Turn on email confirmation in Supabase, delete this test user, and register again."
+      );
+      setResending(false);
+      return;
+    }
+
     const { error: resendError } = await supabase.auth.resend({
       type: "signup",
       email: cleanEmail,

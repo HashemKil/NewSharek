@@ -229,6 +229,11 @@ export default function RegisterPage() {
         }
 
         await supabase.auth.signOut();
+
+        setError(
+          "Supabase created this account as already confirmed, so no verification email was sent. Turn on email confirmation in Supabase Authentication settings, then delete this test user and create it again."
+        );
+        return;
       }
 
       setSuccess(

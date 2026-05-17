@@ -2713,7 +2713,7 @@ export default function AdminEventsPage() {
     () =>
       events.filter(
         (e) =>
-          ((e.approval_status ?? "pending") === "pending" || e.approval_status === "rejected") &&
+          (e.approval_status ?? "pending") === "pending" &&
           !isOldScrapedZincEvent(e)
       ),
     [events]
