@@ -76,11 +76,13 @@ type AdminSidebarProps = {
   adminName?: string;
 };
 
+// Renders the admin navigation shell used across all platform admin pages.
 export default function AdminSidebar({ adminName }: AdminSidebarProps) {
   const pathname = usePathname();
   const router = useRouter();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
 
+  // Ends the admin session and sends the user back to sign in.
   const handleLogout = async () => {
     await supabase.auth.signOut();
     router.push("/login");

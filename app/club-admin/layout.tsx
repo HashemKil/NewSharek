@@ -6,6 +6,7 @@ import { getClubAdminContext } from "../../lib/clubAdmin";
 import { supabase } from "../../lib/supabase";
 import ClubAdminSidebar from "../../components/ClubAdminSidebar";
 
+// Provides the protected club-admin page structure and sidebar.
 export default function ClubAdminLayout({
   children,
 }: {
@@ -18,6 +19,7 @@ export default function ClubAdminLayout({
   const [authorized, setAuthorized] = useState(false);
 
   useEffect(() => {
+    // Defines the check club admin helper used by this screen.
     const checkClubAdmin = async () => {
       const {
         data: { user },

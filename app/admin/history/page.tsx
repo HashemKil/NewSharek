@@ -48,15 +48,18 @@ const CATEGORY_COLORS: Record<string, string> = {
   Career:      "bg-pink-50 text-pink-700",
 };
 
+// Formats dates in the platform-wide event history table.
 function formatDate(d: string | null) {
   if (!d) return "—";
   return new Date(d).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
 }
 
+// Reads the owning club name from a history event relation.
 function getClubName(e: HistoryEvent) {
   return e.clubs?.name?.trim() || e.clubs?.title?.trim() || "—";
 }
 
+// Renders a colored status pill for historical event state.
 function StatusBadge({ status }: { status: string }) {
   const s = STATUS_STYLES[status] ?? { badge: "bg-slate-100 text-slate-600 ring-slate-200", dot: "bg-slate-400" };
   return (
@@ -69,12 +72,14 @@ function StatusBadge({ status }: { status: string }) {
 
 // ─── Detail Modal ─────────────────────────────────────────────────────────────
 
+// Shows full details for one event in the admin history page.
 function EventDetailModal({ event, onClose }: { event: HistoryEvent; onClose: () => void }) {
   const [registrants, setRegistrants] = useState<Registrant[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
   useEffect(() => {
+    // Loads load data from Supabase for this screen.
     const load = async () => {
       setLoading(true);
       setError("");
@@ -201,6 +206,7 @@ function EventDetailModal({ event, onClose }: { event: HistoryEvent; onClose: ()
 
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
+// Lists archived and completed platform events for admin review.
 export default function AdminHistoryPage() {
   const [events, setEvents] = useState<HistoryEvent[]>([]);
   const [loading, setLoading] = useState(true);
@@ -212,6 +218,7 @@ export default function AdminHistoryPage() {
   const [error, setError] = useState("");
   const PAGE_SIZE = 50;
 
+  // Loads events data from Supabase for this screen.
   const loadEvents = async (offset = 0, append = false) => {
     setLoading(true);
     setError("");

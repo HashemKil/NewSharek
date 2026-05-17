@@ -85,6 +85,7 @@ type ManagedClub = {
   title?: string | null;
 };
 
+// Keeps profile phone numbers numeric while allowing one leading plus sign.
 const formatPhoneNumber = (value: string) => {
   const hasLeadingPlus = value.trimStart().startsWith("+");
   const digits = value.replace(/\D/g, "").slice(0, 15);
@@ -117,12 +118,15 @@ const interestOptions = [
   "Tech Communities",
 ];
 
+// Picks the best readable club name for profile membership lists.
 const getClubName = (club: Club) =>
   club.name?.trim() || club.title?.trim() || "Untitled club";
 
+// Extracts the club object from a club membership relation.
 const getClubFromMembership = (membership: ClubMembership) =>
   Array.isArray(membership.clubs) ? membership.clubs[0] : membership.clubs;
 
+// Displays and edits the signed-in user's profile, activity, and memberships.
 export default function ProfilePage() {
   const router = useRouter();
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -171,6 +175,7 @@ export default function ProfilePage() {
     >
   >({});
 
+  // Loads owned teams data from Supabase for this screen.
   const loadOwnedTeams = async (userId: string) => {
     const { data: teamsData, error: teamsError } = await supabase
       .from("teams")
@@ -293,6 +298,7 @@ export default function ProfilePage() {
     setMemberTeams(teams);
   };
 
+  // Loads profile activity data from Supabase for this screen.
   const loadProfileActivity = async (userId: string) => {
     const [
       eventRefsResult,
@@ -376,6 +382,7 @@ export default function ProfilePage() {
   };
 
   useEffect(() => {
+    // Loads profile data from Supabase for this screen.
     const loadProfile = async () => {
       setLoading(true);
       setError("");
@@ -451,11 +458,13 @@ export default function ProfilePage() {
     loadProfile();
   }, [router]);
 
+  // Handles the logout action for this screen.
   const handleLogout = async () => {
     await supabase.auth.signOut();
     router.push("/login");
   };
 
+  // Handles the interest toggle action for this screen.
   const handleInterestToggle = (interest: string) => {
     setInterests((prev) =>
       prev.includes(interest)
@@ -464,6 +473,7 @@ export default function ProfilePage() {
     );
   };
 
+  // Handles the image upload action for this screen.
   const handleImageUpload = async (
     e: React.ChangeEvent<HTMLInputElement>
   ) => {
@@ -556,6 +566,7 @@ export default function ProfilePage() {
     }
   };
 
+  // Handles the save profile action for this screen.
   const handleSaveProfile = async () => {
     if (!profile) return;
 
@@ -634,6 +645,7 @@ export default function ProfilePage() {
     }
   };
 
+  // Closes team and reject pending and applies any required cleanup.
   const closeTeamAndRejectPending = async (teamId: string) => {
     const { error: closeError } = await supabase
       .from("teams")
@@ -659,6 +671,7 @@ export default function ProfilePage() {
     return true;
   };
 
+  // Handles the team application action for this screen.
   const handleTeamApplication = async (
     team: OwnedTeam,
     member: TeamMember,
@@ -746,6 +759,7 @@ export default function ProfilePage() {
     }
   };
 
+  // Handles the add members by student id action for this screen.
   const handleAddMembersByStudentId = async (team: OwnedTeam) => {
     if (!profile) return;
 
@@ -883,6 +897,7 @@ export default function ProfilePage() {
     }
   };
 
+  // Starts editing team for the selected record.
   const startEditingTeam = (team: OwnedTeam) => {
     setEditingTeamId(team.id);
     setTeamEditValues((current) => ({
@@ -899,6 +914,7 @@ export default function ProfilePage() {
     setSuccess("");
   };
 
+  // Handles the save team settings action for this screen.
   const handleSaveTeamSettings = async (team: OwnedTeam) => {
     if (!profile) return;
 
@@ -1017,6 +1033,7 @@ export default function ProfilePage() {
     }
   };
 
+  // Handles the cancel membership request action for this screen.
   const handleCancelMembershipRequest = async (team: MemberTeam) => {
     if (!profile) return;
 
@@ -1043,6 +1060,7 @@ export default function ProfilePage() {
     }
   };
 
+  // Handles the team invite response action for this screen.
   const handleTeamInviteResponse = async (
     team: MemberTeam,
     status: "approved" | "rejected"

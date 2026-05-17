@@ -89,6 +89,7 @@ type EditForm = {
 const inputCls =
   "w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-800 placeholder-slate-400 outline-none transition focus:border-[#1e3a8a] focus:bg-white focus:ring-2 focus:ring-[#1e3a8a]/10";
 
+// Standardizes field labels inside user management modals.
 function Label({ children }: { children: React.ReactNode }) {
   return (
     <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-slate-400">
@@ -97,9 +98,11 @@ function Label({ children }: { children: React.ReactNode }) {
   );
 }
 
+// Normalizes Supabase relation values that may come back as one object or an array.
 const getOne = <T,>(value: T | T[] | null | undefined) =>
   Array.isArray(value) ? value[0] : value;
 
+// Formats dates for user profiles, memberships, and event history.
 const formatDate = (value?: string | null) => {
   if (!value) return "Not recorded";
   const parsed = new Date(value);
@@ -111,12 +114,14 @@ const formatDate = (value?: string | null) => {
   });
 };
 
+// Builds a readable start-to-end date range for event history rows.
 const formatEventDateRange = (start?: string | null, end?: string | null) => {
   const startLabel = formatDate(start);
   if (!end || end === start) return startLabel;
   return `${startLabel} - ${formatDate(end)}`;
 };
 
+// Renders the correct colored pill for user-related statuses.
 const StatusPill = ({ status }: { status?: string | null }) => {
   const value = status || "unknown";
   return (
@@ -126,6 +131,7 @@ const StatusPill = ({ status }: { status?: string | null }) => {
   );
 };
 
+// Renders one admin role toggle with a label and helper text.
 const RoleToggle = ({
   active,
   label,
@@ -154,6 +160,7 @@ const RoleToggle = ({
 
 // ─── Edit Modal ───────────────────────────────────────────────────────────────
 
+// Lets admins edit a user's profile fields and platform roles.
 function EditUserModal({
   user,
   onClose,
@@ -179,6 +186,7 @@ function EditUserModal({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
+  // Handles the save action for this screen.
   const handleSave = async () => {
     setSaving(true);
     setError("");
@@ -369,6 +377,7 @@ function EditUserModal({
   );
 }
 
+// Shows all useful data about a user, including clubs and event history.
 function ViewUserModal({
   user,
   onClose,
@@ -385,6 +394,7 @@ function ViewUserModal({
   const [error, setError] = useState("");
 
   useEffect(() => {
+    // Loads details data from Supabase for this screen.
     const loadDetails = async () => {
       setLoading(true);
       setError("");
@@ -662,6 +672,7 @@ function ViewUserModal({
 
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
+// Main user management page for searching, viewing, editing, and deleting users.
 export default function AdminUsersPage() {
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [loading, setLoading] = useState(true);
@@ -672,6 +683,7 @@ export default function AdminUsersPage() {
   const [editUser, setEditUser] = useState<AdminUser | null>(null);
   const [viewUser, setViewUser] = useState<AdminUser | null>(null);
 
+  // Loads users data from Supabase for this screen.
   const loadUsers = async () => {
     setLoading(true);
     setError("");
@@ -708,6 +720,7 @@ export default function AdminUsersPage() {
     void Promise.resolve().then(loadUsers);
   }, []);
 
+  // Handles the role toggle action for this screen.
   const handleRoleToggle = async (
     userId: string,
     role: RoleKey,
@@ -750,6 +763,7 @@ export default function AdminUsersPage() {
     );
   }, [users, search]);
 
+  // Defines the initials helper used by this screen.
   const initials = (name: string) =>
     name
       .split(" ")

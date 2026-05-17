@@ -10,6 +10,7 @@ type ProfileReminder = {
   missingFields: string[];
 };
 
+// Checks whether a profile field is missing or only contains spaces.
 const isBlank = (value: string | null | undefined) => !value?.trim();
 
 // The navbar owns the profile reminder because it is shared across every
@@ -38,6 +39,7 @@ const getMissingProfileFields = (profile: {
   return missing;
 };
 
+// Renders the shared top navigation and shows role-specific links for each user.
 export default function AppNavbar() {
   const pathname = usePathname();
   const router = useRouter();
@@ -49,6 +51,7 @@ export default function AppNavbar() {
 
   // Load the current user's navigation permissions and profile reminder state.
   useEffect(() => {
+    // Loads the signed-in user's roles and profile completion reminder.
     const checkAdmin = async () => {
       const {
         data: { user },
@@ -94,6 +97,7 @@ export default function AppNavbar() {
     { name: "Profile", href: "/profile" },
   ];
 
+  // Signs the user out and returns them to the login page.
   const handleLogout = async () => {
     await supabase.auth.signOut();
     router.push("/login");

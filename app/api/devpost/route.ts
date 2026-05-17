@@ -19,6 +19,7 @@ const HEADERS: Record<string, string> = {
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36 OPR/130.0.0.0",
 };
 
+// Fetches Devpost listings through a server route to avoid browser CORS issues.
 export async function GET() {
   try {
     const res = await fetch(DEVPOST_URL, { headers: HEADERS });

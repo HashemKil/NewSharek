@@ -23,6 +23,7 @@ type RecentEvent = {
   event_date: string | null;
 };
 
+// Reusable dashboard card for one clickable admin metric.
 const StatCard = ({
   label,
   value,
@@ -36,6 +37,7 @@ const StatCard = ({
   icon: React.ReactNode;
   href?: string;
 }) => {
+  // Defines the content helper used by this screen.
   const content = (
     <div className="flex items-start justify-between">
       <div>
@@ -66,6 +68,7 @@ const statusColors: Record<string, string> = {
   rejected: "bg-red-50 text-red-600",
 };
 
+// Shows platform-level totals, recent activity, and admin shortcuts.
 export default function AdminDashboard() {
   const [stats, setStats] = useState<Stats>({
     totalUsers: 0,
@@ -78,6 +81,7 @@ export default function AdminDashboard() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    // Loads stats data from Supabase for this screen.
     const loadStats = async () => {
       setLoading(true);
 

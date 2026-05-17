@@ -21,6 +21,7 @@ type ClubAdminContext =
       error: string;
     };
 
+// Loads the current club admin and the club they are allowed to manage.
 export async function getClubAdminContext(): Promise<ClubAdminContext> {
   const {
     data: { user },

@@ -16,6 +16,7 @@ type ClubDetailsForm = {
 const inputCls =
   "w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-800 placeholder-slate-400 outline-none transition focus:border-[#1e3a8a] focus:bg-white focus:ring-2 focus:ring-[#1e3a8a]/10";
 
+// Converts the managed club record into editable form values.
 function toFormValues(club: ManagedClub): ClubDetailsForm {
   return {
     name: club.name ?? "",
@@ -25,6 +26,7 @@ function toFormValues(club: ManagedClub): ClubDetailsForm {
   };
 }
 
+// Lets a club admin update the public details and logo for their assigned club.
 export default function ClubAdminDetailsPage() {
   const [managedClub, setManagedClub] = useState<ManagedClub | null>(null);
   const [form, setForm] = useState<ClubDetailsForm>({
@@ -40,6 +42,7 @@ export default function ClubAdminDetailsPage() {
   const [success, setSuccess] = useState("");
 
   useEffect(() => {
+    // Loads club data from Supabase for this screen.
     const loadClub = async () => {
       setLoading(true);
       setError("");
@@ -75,6 +78,7 @@ export default function ClubAdminDetailsPage() {
     void Promise.resolve().then(loadClub);
   }, []);
 
+  // Handles the logo file change action for this screen.
   const handleLogoFileChange = async (
     event: React.ChangeEvent<HTMLInputElement>
   ) => {
@@ -110,6 +114,7 @@ export default function ClubAdminDetailsPage() {
     }
   };
 
+  // Handles the save action for this screen.
   const handleSave = async () => {
     if (!managedClub?.id) return;
 

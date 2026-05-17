@@ -17,6 +17,7 @@ export const viewport: Viewport = {
   initialScale: 1,
 };
 
+// Wraps every page with the root HTML structure used by Next.js.
 export default function RootLayout({
   children,
 }: Readonly<{

@@ -16,6 +16,7 @@ export interface ZincEventPayload {
   source_url: string;
 }
 
+// Normalizes scraped text so duplicate checks are consistent.
 function normalizeDuplicateText(value: string | null | undefined) {
   return (value ?? "")
     .toLowerCase()
@@ -25,11 +26,13 @@ function normalizeDuplicateText(value: string | null | undefined) {
     .replace(/\s+/g, " ");
 }
 
+// Builds the duplicate key used before saving a scraped ZINC event.
 function getDuplicateKey(event: Pick<ZincEventPayload, "title" | "event_date">) {
   const dateKey = event.event_date ? event.event_date.slice(0, 10) : "no-date";
   return `${normalizeDuplicateText(event.title)}|${dateKey}`;
 }
 
+// Converts scraper date formats into YYYY-MM-DD database values.
 function normalizeDate(value: string | null | undefined) {
   if (!value) return null;
   const trimmed = value.trim();
@@ -50,6 +53,7 @@ function normalizeDate(value: string | null | undefined) {
   return parsed.toISOString().slice(0, 10);
 }
 
+// Converts scraper time values into HH:mm:ss database values.
 function normalizeTime(value: string | null | undefined) {
   if (!value) return null;
   const trimmed = value.trim();
@@ -69,6 +73,7 @@ function normalizeTime(value: string | null | undefined) {
   return `${String(hours).padStart(2, "0")}:${minutes}`;
 }
 
+// Prevents old scraped ZINC events from being saved for review.
 function isUpcomingOrOngoing(event: ZincEventPayload) {
   const eventDate = normalizeDate(event.event_date);
   const endDate = normalizeDate(event.end_date) ?? eventDate;
@@ -77,6 +82,7 @@ function isUpcomingOrOngoing(event: ZincEventPayload) {
   return !!endDate && endDate >= today;
 }
 
+// Saves new scraped ZINC events into the pending review queue.
 export async function POST(request: Request) {
   try {
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;

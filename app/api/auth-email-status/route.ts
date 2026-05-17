@@ -1,6 +1,7 @@
 import { createClient } from "@supabase/supabase-js";
 import { NextResponse } from "next/server";
 
+// Checks whether a Supabase auth user is already email-confirmed.
 export async function POST(request: Request) {
   const { email } = (await request.json().catch(() => ({}))) as {
     email?: string;

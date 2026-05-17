@@ -6,6 +6,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "../../lib/supabase";
 
+// Handles student sign-in by looking up the email connected to a student ID.
 export default function LoginPage() {
   const router = useRouter();
 
@@ -29,6 +30,7 @@ export default function LoginPage() {
     }
   }, []);
 
+  // Validates verification state, signs in with Supabase, and routes to the app.
   const handleLogin = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setError("");

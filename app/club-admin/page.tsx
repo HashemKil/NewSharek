@@ -35,6 +35,7 @@ type ManagedClub = {
   category?: string | null;
 };
 
+// Reusable dashboard card for one clickable club-admin metric.
 const StatCard = ({
   label,
   value,
@@ -48,6 +49,7 @@ const StatCard = ({
   icon: React.ReactNode;
   href?: string;
 }) => {
+  // Defines the content helper used by this screen.
   const content = (
     <div className="flex items-start justify-between">
       <div>
@@ -76,6 +78,7 @@ const statusColors: Record<string, string> = {
   rejected: "bg-red-50 text-red-600",
 };
 
+// Shows the assigned club's members, events, and quick management actions.
 export default function ClubAdminDashboard() {
   const [stats, setStats] = useState<Stats>({
     totalEvents: 0,
@@ -87,6 +90,7 @@ export default function ClubAdminDashboard() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    // Loads stats data from Supabase for this screen.
     const loadStats = async () => {
       setLoading(true);
 

@@ -80,6 +80,7 @@ type ClubMembershipRow = {
   clubs?: ClubRow | ClubRow[] | null;
 };
 
+// Formats database dates into readable labels for dashboard cards.
 const formatDate = (value?: string | null) => {
   if (!value) return "Date not set";
   const datePart = value.split("T")[0];
@@ -95,6 +96,7 @@ const formatDate = (value?: string | null) => {
   });
 };
 
+// Converts 24-hour time strings into short AM/PM labels.
 const formatTime = (value?: string | null) => {
   if (!value) return "";
   const [hours, minutes] = value.split(":");
@@ -109,15 +111,19 @@ const formatTime = (value?: string | null) => {
   });
 };
 
+// Safely reads a club name from Supabase relation shapes.
 const getClubName = (club: ClubRow) =>
   club.name?.trim() || club.title?.trim() || "Untitled club";
 
+// Extracts the team object from a team membership relation.
 const getTeamFromMembership = (membership: TeamMemberRow) =>
   Array.isArray(membership.teams) ? membership.teams[0] : membership.teams;
 
+// Extracts the club object from a club membership relation.
 const getClubFromMembership = (membership: ClubMembershipRow) =>
   Array.isArray(membership.clubs) ? membership.clubs[0] : membership.clubs;
 
+// Checks whether Supabase failed because a deployment is missing a column.
 function isMissingColumnError(error: { message?: string; code?: string } | null) {
   if (!error) return false;
   return (
@@ -127,6 +133,7 @@ function isMissingColumnError(error: { message?: string; code?: string } | null)
   );
 }
 
+// Parses a date-only value without timezone drift for registration checks.
 const parseDateOnly = (value?: string | null) => {
   if (!value) return null;
   const datePart = value.split("T")[0];
@@ -136,6 +143,7 @@ const parseDateOnly = (value?: string | null) => {
   return Number.isNaN(parsed.getTime()) ? null : parsed;
 };
 
+// Determines whether students should still be able to join an event.
 const isOpenForRegistration = (event: EventRow) => {
   if ((event.approval_status ?? "approved") !== "approved") return false;
 
@@ -178,6 +186,7 @@ const DEFAULT_CAROUSEL: CarouselItem[] = [
   },
 ];
 
+// Renders the student dashboard with news, profile summary, events, and clubs.
 export default function HomePage() {
   const router = useRouter();
 
@@ -209,6 +218,7 @@ export default function HomePage() {
   }, []);
 
   useEffect(() => {
+    // Loads home data from Supabase for this screen.
     const loadHome = async () => {
       setLoading(true);
       setError("");
@@ -393,6 +403,7 @@ export default function HomePage() {
     );
   };
 
+  // Moves the UI to next news.
   const goToNextNews = () => {
     setActiveNewsIndex((current) => (current + 1) % psutNewsItems.length);
   };

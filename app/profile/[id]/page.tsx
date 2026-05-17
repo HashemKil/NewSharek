@@ -29,9 +29,11 @@ type ManagedClub = {
   title?: string | null;
 };
 
+// Reads a club display name for member profile leadership badges.
 const getClubName = (club: ManagedClub) =>
   club.name?.trim() || club.title?.trim() || "Untitled club";
 
+// Shows another student's profile to admins, club admins, or team members.
 export default function MemberProfilePage() {
   const params = useParams();
   const router = useRouter();
@@ -44,6 +46,7 @@ export default function MemberProfilePage() {
   const [error, setError] = useState("");
 
   useEffect(() => {
+    // Loads profile data from Supabase for this screen.
     const loadProfile = async () => {
       if (!id) return;
 

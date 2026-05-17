@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { supabase } from "../../lib/supabase";
 import AdminSidebar from "../../components/AdminSidebar";
 
+// Provides the protected admin page structure and sidebar.
 export default function AdminLayout({
   children,
 }: {
@@ -16,6 +17,7 @@ export default function AdminLayout({
   const [authorized, setAuthorized] = useState(false);
 
   useEffect(() => {
+    // Defines the check admin helper used by this screen.
     const checkAdmin = async () => {
       // Step 1: Get the currently logged-in user from Supabase Auth
       const {

@@ -4,11 +4,13 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "../../../lib/supabase";
 
+// Handles Supabase email-verification links and finalizes the user's profile.
 export default function AuthCallbackPage() {
   const router = useRouter();
   const [message, setMessage] = useState("Verifying your email...");
 
   useEffect(() => {
+    // Reads tokens Supabase may return in the URL hash after email verification.
     const getHashParams = () => {
       const hash = window.location.hash.startsWith("#")
         ? window.location.hash.slice(1)
@@ -16,6 +18,7 @@ export default function AuthCallbackPage() {
       return new URLSearchParams(hash);
     };
 
+    // Exchanges the verification link for a session, verifies the email, and updates the profile.
     const verifyEmail = async () => {
       try {
         const params = new URLSearchParams(window.location.search);

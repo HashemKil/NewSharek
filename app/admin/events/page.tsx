@@ -108,6 +108,7 @@ type CreateEventForm = EditableFields & {
 
 const MAX_EVENT_IMAGE_SIZE_BYTES = 3 * 1024 * 1024;
 
+// Converts an uploaded event image into a data URL for preview and saving.
 const readImageFile = (file: File) =>
   new Promise<string>((resolve, reject) => {
     const reader = new FileReader();
@@ -118,6 +119,7 @@ const readImageFile = (file: File) =>
 
 // Devpost date ranges are free text, so parse them defensively and keep only open opportunities.
 
+// Extracts start and end dates from Devpost's human-readable date range text.
 function parseDevpostDateRange(value: unknown) {
   if (typeof value !== "string" || !value.trim()) {
     return { startDate: null, endDate: null, registrationDeadline: null };
@@ -131,6 +133,7 @@ function parseDevpostDateRange(value: unknown) {
   const year = endText.match(/\b(20\d{2})\b/)?.[1];
   const startText = parts[0] && year && !/\b20\d{2}\b/.test(parts[0]) ? `${parts[0]}, ${year}` : parts[0];
 
+  // Parses parse into the shape this screen needs.
   const parse = (text: string | undefined) => {
     if (!text) return null;
     const parsed = new Date(text);
@@ -148,11 +151,13 @@ function parseDevpostDateRange(value: unknown) {
   };
 }
 
+// Checks whether a scraped date should still be considered relevant.
 function isFutureDateString(value: string | null) {
   if (!value) return false;
   return value >= new Date().toISOString().slice(0, 10);
 }
-async function fetchDevpostEvents(): Promise<AdminEvent[]> {
+  // Fetches Devpost hackathons and converts them into pending review events.
+  async function fetchDevpostEvents(): Promise<AdminEvent[]> {
   const res = await fetch("/api/devpost");
   if (!res.ok) return [];
   const json = await res.json();
@@ -220,6 +225,7 @@ const CATEGORY_COLORS: Record<string, string> = {
   Other: "bg-slate-100 text-slate-600",
 };
 
+// Formats event dates for admin cards and modals.
 function formatDate(dateStr: string | null) {
   if (!dateStr) return "-";
   return new Date(dateStr).toLocaleDateString("en-GB", {
@@ -229,6 +235,7 @@ function formatDate(dateStr: string | null) {
   });
 }
 
+// Formats timestamps such as publish and scrape dates.
 function formatDateTime(dateStr: string | null) {
   if (!dateStr) return "-";
   return new Date(dateStr).toLocaleString("en-GB", {
@@ -240,11 +247,13 @@ function formatDateTime(dateStr: string | null) {
   });
 }
 
+// Checks whether an event starts today or later.
 function isUpcoming(event: AdminEvent) {
   if (!event.event_date) return false;
   return new Date(event.event_date) >= new Date();
 }
 
+// Builds a comparable end time from end date, event date, and end time fields.
 function getEventEndTime(event: AdminEvent) {
   const value = event.end_date || event.event_date;
   if (!value) return null;
@@ -253,31 +262,37 @@ function getEventEndTime(event: AdminEvent) {
   return date.getTime();
 }
 
+// Determines whether an event should be listed in the Done tab.
 function isEventDone(event: AdminEvent) {
   const endTime = getEventEndTime(event);
   if (!endTime) return false;
   return endTime < Date.now();
 }
 
+// Filters out old ZINC scraped events so they do not clutter review.
 function isOldScrapedZincEvent(event: AdminEvent) {
   return Boolean(event.source_url?.startsWith("https://zinc.jo/event/") && isEventDone(event));
 }
 
+// Determines whether an approved event is still open for student registration.
 function isRegistrationOpen(event: AdminEvent) {
   if (!event.registration_deadline) return true;
   return new Date(event.registration_deadline).getTime() >= Date.now();
 }
 
+// Sorts available events by soonest start date.
 function sortWorkingEvents(a: AdminEvent, b: AdminEvent) {
   const aTime = a.event_date ? new Date(a.event_date).getTime() : Number.MAX_SAFE_INTEGER;
   const bTime = b.event_date ? new Date(b.event_date).getTime() : Number.MAX_SAFE_INTEGER;
   return aTime - bTime;
 }
 
+// Sorts completed events by most recent ending date.
 function sortDoneEvents(a: AdminEvent, b: AdminEvent) {
   return (getEventEndTime(b) ?? 0) - (getEventEndTime(a) ?? 0);
 }
 
+// Normalizes text so duplicate detection ignores casing and extra spacing.
 function normalizeDuplicateText(value: string | null | undefined) {
   return (value ?? "")
     .toLowerCase()
@@ -287,12 +302,14 @@ function normalizeDuplicateText(value: string | null | undefined) {
     .replace(/\s+/g, " ");
 }
 
+// Builds the comparison key used to identify duplicate events.
 function getDuplicateEventKey(event: AdminEvent) {
   const dateKey = event.event_date ? event.event_date.slice(0, 10) : "no-date";
   return `${normalizeDuplicateText(event.title)}|${dateKey}`;
 }
 
 // Scrapers and manual imports can point to the same event; keep the richest copy.
+// Removes duplicate events while keeping the most useful approved or newer item.
 function dedupeEvents<T extends AdminEvent>(items: T[]) {
   const byKey = new Map<string, T>();
   for (const item of items) {
@@ -320,6 +337,7 @@ function dedupeEvents<T extends AdminEvent>(items: T[]) {
   return Array.from(byKey.values());
 }
 
+// Calculates how many days remain until an event starts.
 function daysUntil(dateStr: string | null) {
   if (!dateStr) return null;
   const diff = Math.ceil(
@@ -331,6 +349,7 @@ function daysUntil(dateStr: string | null) {
   return `In ${diff} days`;
 }
 
+// Converts database timestamps into datetime-local input values.
 function toDateTimeInput(value: string | null) {
   if (!value) return "";
   return value.slice(0, 16);
@@ -338,6 +357,7 @@ function toDateTimeInput(value: string | null) {
 
 // Shared presentation helpers keep repeated admin cards and modals consistent.
 
+// Renders an admin status pill with the correct color.
 function StatusBadge({ status }: { status: string }) {
   const s = STATUS_STYLES[status] ?? {
     badge: "bg-slate-100 text-slate-600 ring-slate-200",
@@ -353,6 +373,7 @@ function StatusBadge({ status }: { status: string }) {
   );
 }
 
+// Renders the category label with its matching admin color.
 function CategoryPill({
   category,
   title,
@@ -376,6 +397,7 @@ function CategoryPill({
 const inputCls =
   "w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-800 placeholder-slate-400 outline-none transition focus:border-[#1e3a8a] focus:bg-white focus:ring-2 focus:ring-[#1e3a8a]/10";
 
+// Standardizes form labels inside admin event modals.
 function Label({ children }: { children: React.ReactNode }) {
   return (
     <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-slate-400">
@@ -384,6 +406,7 @@ function Label({ children }: { children: React.ReactNode }) {
   );
 }
 
+// Shows a consistent empty-state block when a tab has no events.
 function EmptyState({
   icon,
   message,
@@ -406,6 +429,7 @@ function EmptyState({
 
 // Pending cards represent scraper imports or club submissions that still need admin review.
 
+// Displays one event waiting for admin review.
 function PendingCard({
   event,
   isMock,
@@ -513,6 +537,7 @@ function PendingCard({
 
 // Active cards cover both available and finished events in the admin workspace.
 
+// Displays one approved event in Available or Done lists.
 function ActiveCard({
   event,
   onClick,
@@ -610,6 +635,7 @@ function ActiveCard({
 
 // Admins clean imported or club-submitted events here before approving or rejecting them.
 
+// Lets admins review, edit, approve, reject, or delete a pending event.
 function PendingModal({
   event,
   clubs,
@@ -655,6 +681,7 @@ function PendingModal({
   const [saveError, setSaveError] = useState("");
   const [saveSuccess, setSaveSuccess] = useState("");
 
+  // Handles the save action for this screen.
   const handleSave = async () => {
     const selectedCategory = normalizeEventCategory(edit.category);
     if (!selectedCategory) {
@@ -783,6 +810,7 @@ function PendingModal({
     setSaving(false);
   };
 
+  // Handles the status change action for this screen.
   const handleStatusChange = async (newStatus: "approved" | "rejected") => {
     if (isMock) {
       const selectedCategory = normalizeEventCategory(edit.category);
@@ -842,6 +870,7 @@ function PendingModal({
     setApproving(false);
   };
 
+  // Handles the delete action for this screen.
   const handleDelete = async () => {
     if (isMock) { onDeleted(event.id); onClose(); return; }
     setDeleting(true);
@@ -1100,6 +1129,7 @@ function PendingModal({
 
 // Create modal uses the same fields as edit modals so every event source stays compatible.
 
+// Lets admins create a complete event record directly from the dashboard.
 function CreateEventModal({
   onClose,
   onCreated,
@@ -1136,6 +1166,7 @@ function CreateEventModal({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
+  // Handles the image file action for this screen.
   const handleImageFile = async (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     event.target.value = "";
@@ -1165,6 +1196,7 @@ function CreateEventModal({
     }
   };
 
+  // Handles the create action for this screen.
   const handleCreate = async () => {
     if (!form.title.trim()) {
       setError("Event title is required.");
@@ -1618,6 +1650,7 @@ function CreateEventModal({
   );
 }
 
+// Provides the controlled category dropdown used by event forms.
 function CategorySelect({
   value,
   onChange,
@@ -1641,6 +1674,7 @@ function CategorySelect({
   );
 }
 
+// Lets admins inspect and update an approved or completed event.
 function ActiveModal({
   event,
   clubs,
@@ -1691,6 +1725,7 @@ function ActiveModal({
 
   const upcoming = isUpcoming(event);
 
+  // Handles the save edit action for this screen.
   const handleSaveEdit = async () => {
     const selectedCategory = normalizeEventCategory(edit.category);
     if (!selectedCategory) {
@@ -1763,6 +1798,7 @@ function ActiveModal({
 
   useEffect(() => {
     if (activeTab !== "registrations") return;
+    // Loads load data from Supabase for this screen.
     const load = async () => {
       setRegLoading(true);
       setRegError("");
@@ -1803,6 +1839,7 @@ function ActiveModal({
 
   useEffect(() => {
     if (activeTab !== "teams") return;
+    // Loads load data from Supabase for this screen.
     const load = async () => {
       setTeamsLoading(true);
       setTeamsError("");
@@ -1824,6 +1861,7 @@ function ActiveModal({
     load();
   }, [activeTab, event.title]);
 
+  // Updates team status and refreshes the related UI state.
   const updateTeamStatus = async (teamId: string, status: "approved" | "rejected") => {
     if (status === "approved" && event.max_capacity) {
       const approvedTeams = teams.filter(
@@ -1850,6 +1888,7 @@ function ActiveModal({
     setTeamSavingId(null);
   };
 
+  // Updates member status and refreshes the related UI state.
   const updateMemberStatus = async (
     memberId: string,
     status: "approved" | "rejected" | "pending" | "invited"
@@ -1876,6 +1915,7 @@ function ActiveModal({
     setMemberSavingId(null);
   };
 
+  // Defines the add member to team helper used by this screen.
   const addMemberToTeam = async (teamId: string) => {
     const studentId = addMemberStudentId.trim();
     if (!studentId) {
@@ -2385,6 +2425,7 @@ function ActiveModal({
 
 // Shared modal shell keeps the overlay, sizing, and close behavior consistent.
 
+// Provides the shared modal frame for event management dialogs.
 function ModalShell({
   children,
   onClose,
@@ -2407,6 +2448,7 @@ function ModalShell({
 
 // Mini helpers for small formatting and repeated form controls.
 
+// Displays one icon, label, and value row in event details.
 function InfoRow({ icon, label, value }: { icon: React.ReactNode; label: string; value: string }) {
   return (
     <div className="flex items-start gap-3">
@@ -2419,6 +2461,7 @@ function InfoRow({ icon, label, value }: { icon: React.ReactNode; label: string;
   );
 }
 
+// Shows success or error messages inside the admin events page.
 function AlertBox({ type, children }: { type: "error" | "success"; children: React.ReactNode }) {
   const styles = type === "error"
     ? "border-red-200 bg-red-50 text-red-600"
@@ -2426,6 +2469,7 @@ function AlertBox({ type, children }: { type: "error" | "success"; children: Rea
   return <div className={`rounded-xl border px-4 py-3 text-sm ${styles}`}>{children}</div>;
 }
 
+// Shows placeholder rows while event data is loading.
 function LoadingSkeleton({ rows = 4, height = "h-14" }: { rows?: number; height?: string }) {
   return (
     <div className="space-y-3">
@@ -2438,6 +2482,7 @@ function LoadingSkeleton({ rows = 4, height = "h-14" }: { rows?: number; height?
 
 // Inline SVG icons used by this page.
 
+// Renders the small calendar icon used in event metadata.
 function CalendarIcon() {
   return (
     <svg width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
@@ -2445,6 +2490,7 @@ function CalendarIcon() {
     </svg>
   );
 }
+// Renders the location pin icon used in event metadata.
 function PinIcon() {
   return (
     <svg width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
@@ -2452,6 +2498,7 @@ function PinIcon() {
     </svg>
   );
 }
+// Renders the tag icon used in event metadata.
 function TagIcon() {
   return (
     <svg width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
@@ -2459,6 +2506,7 @@ function TagIcon() {
     </svg>
   );
 }
+// Renders the source-link icon used for scraped events.
 function LinkIcon() {
   return (
     <svg width="11" height="11" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
@@ -2467,6 +2515,7 @@ function LinkIcon() {
     </svg>
   );
 }
+// Renders the chevron icon used for review links.
 function ChevronRightIcon() {
   return (
     <svg width="11" height="11" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
@@ -2474,6 +2523,7 @@ function ChevronRightIcon() {
     </svg>
   );
 }
+// Renders the close icon used in modal buttons.
 function CloseIcon({ size = 18 }: { size?: number }) {
   return (
     <svg width={size} height={size} fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
@@ -2481,6 +2531,7 @@ function CloseIcon({ size = 18 }: { size?: number }) {
     </svg>
   );
 }
+// Renders the check icon used on approve actions.
 function CheckIcon() {
   return (
     <svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
@@ -2488,6 +2539,7 @@ function CheckIcon() {
     </svg>
   );
 }
+// Renders the trash icon used on destructive delete actions.
 function TrashIcon() {
   return (
     <svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
@@ -2496,6 +2548,7 @@ function TrashIcon() {
     </svg>
   );
 }
+// Renders the people icon used for empty registration states.
 function PeopleIcon() {
   return (
     <svg width="28" height="28" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24">
@@ -2509,6 +2562,7 @@ function PeopleIcon() {
 
 type ApiSource = { id: string; name: string; curl: string };
 
+// Shows the scraper source settings panel for admin-managed imports.
 function ApiSourcesPanel({ onClose }: { onClose: () => void }) {
   const [sources, setSources] = useState<ApiSource[]>([]);
   const [loading, setLoading] = useState(true);
@@ -2517,6 +2571,7 @@ function ApiSourcesPanel({ onClose }: { onClose: () => void }) {
   const [curl, setCurl] = useState("");
   const [err, setErr] = useState("");
 
+  // Loads load data from Supabase for this screen.
   const load = async () => {
     const { data } = await supabase.from("site_settings").select("value").eq("key", "api_sources").single();
     setSources((data?.value as ApiSource[]) ?? []);
@@ -2526,6 +2581,7 @@ function ApiSourcesPanel({ onClose }: { onClose: () => void }) {
     void Promise.resolve().then(load);
   }, []);
 
+  // Defines the persist helper used by this screen.
   const persist = async (next: ApiSource[]) => {
     setSaving(true);
     await supabase.from("site_settings").upsert({ key: "api_sources", value: next, updated_at: new Date().toISOString() });
@@ -2533,6 +2589,7 @@ function ApiSourcesPanel({ onClose }: { onClose: () => void }) {
     setSaving(false);
   };
 
+  // Handles the add action for this screen.
   const handleAdd = () => {
     if (!name.trim() || !curl.trim()) { setErr("Both name and cURL are required."); return; }
     persist([...sources, { id: crypto.randomUUID(), name: name.trim(), curl: curl.trim() }]);
@@ -2616,6 +2673,7 @@ function ApiSourcesPanel({ onClose }: { onClose: () => void }) {
 
 // Main admin events page.
 
+// Main admin screen for reviewing, approving, creating, and monitoring events.
 export default function AdminEventsPage() {
   const [events, setEvents] = useState<AdminEvent[]>([]);
   const [clubs, setClubs] = useState<ClubOption[]>([]);
@@ -2634,6 +2692,7 @@ export default function AdminEventsPage() {
   const [zincSyncing, setZincSyncing] = useState(false);
   const [zincMsg, setZincMsg] = useState("");
 
+  // Loads events data from Supabase for this screen.
   const loadEvents = async () => {
     setLoading(true);
     setError("");
@@ -2660,6 +2719,7 @@ export default function AdminEventsPage() {
     setLoading(false);
   };
 
+  // Loads clubs data from Supabase for this screen.
   const loadClubs = async () => {
     setClubsError("");
 
@@ -2882,10 +2942,12 @@ export default function AdminEventsPage() {
                   "conference","javascript","python","react","node","api","ui","ux",
                   "design","network","stem","engineering","training",
                 ];
+                // Checks whether it is true for this record.
                 const isIT = (title: string, desc: string) => {
                   const t = `${title} ${desc}`.toLowerCase();
                   return IT_KW.some((k) => t.includes(k));
                 };
+                // Defines the clean text helper used by this screen.
                 const cleanText = (value: string) => {
                   const withoutCdata = value.replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, "$1");
                   const withoutHtml = withoutCdata.replace(/<[^>]+>/g, " ");
@@ -2893,6 +2955,7 @@ export default function AdminEventsPage() {
                   textarea.innerHTML = withoutHtml;
                   return textarea.value.replace(/\s+/g, " ").trim();
                 };
+                // Normalizes scraped date before comparing or saving it.
                 const normalizeScrapedDate = (value: string | null | undefined) => {
                   if (!value) return null;
                   const trimmed = value.trim();
@@ -2913,14 +2976,17 @@ export default function AdminEventsPage() {
                   return parsed.toISOString().slice(0, 10);
                 };
                 const todayIso = new Date().toISOString().slice(0, 10);
+                // Checks whether still useful event is true for this record.
                 const isStillUsefulEvent = (startDate: string | null, endDate: string | null) => {
                   const finalDate = normalizeScrapedDate(endDate) ?? normalizeScrapedDate(startDate);
                   return !!finalDate && finalDate >= todayIso;
                 };
+                // Gets tag for this workflow.
                 const getTag = (block: string, tag: string) => {
                   const m = block.match(new RegExp(`<${tag}>([\\s\\S]*?)<\\/${tag}>`));
                   return m ? cleanText(m[1]) : "";
                 };
+                // Gets first tag for this workflow.
                 const getFirstTag = (block: string, tags: string[]) => {
                   for (const tag of tags) {
                     const value = getTag(block, tag);
@@ -2928,6 +2994,7 @@ export default function AdminEventsPage() {
                   }
                   return "";
                 };
+                // Defines the absolute zinc url helper used by this screen.
                 const absoluteZincUrl = (value: string) => {
                   if (!value) return "";
                   if (/^https?:\/\//i.test(value)) return value;
@@ -3278,6 +3345,7 @@ export default function AdminEventsPage() {
 }
 
 // Tab button helper
+// Renders one tab button and count in the admin event status switcher.
 function TabBtn({
   active,
   onClick,

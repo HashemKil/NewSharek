@@ -1,3 +1,4 @@
+// Converts stored tag values into clean display labels with capitalized words.
 export function formatTagLabel(value: string | null | undefined) {
   const cleaned = (value ?? "").trim();
   if (!cleaned) return "";

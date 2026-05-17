@@ -11,6 +11,7 @@ type ClubAdminSidebarProps = {
   clubName?: string;
 };
 
+// Renders the club-admin navigation for the club a user is assigned to manage.
 export default function ClubAdminSidebar({
   adminName,
   clubName,
@@ -76,6 +77,7 @@ export default function ClubAdminSidebar({
     },
   ];
 
+  // Ends the club-admin session and returns to the login screen.
   const handleLogout = async () => {
     await supabase.auth.signOut();
     router.push("/login");

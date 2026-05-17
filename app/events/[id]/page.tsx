@@ -98,6 +98,7 @@ const inputClass =
 const TEAM_MEMBER_LIMIT = 6;
 type EventStatus = "upcoming" | "ongoing" | "completed";
 
+// Chooses the most useful image URL for the event details page.
 const getEventImageUrl = (event: EventRow | null) =>
   event?.image_url?.trim() ||
   event?.poster_url?.trim() ||
@@ -105,9 +106,11 @@ const getEventImageUrl = (event: EventRow | null) =>
   event?.thumbnail_url?.trim() ||
   null;
 
+// Detects online events so the details page does not show a physical map.
 const isOnlineLocation = (location?: string | null) =>
   !location || /\bonline\b|virtual|remote/i.test(location);
 
+// Builds a Google Maps embed URL from the event location fields.
 const getMapEmbedUrl = (location?: string | null) => {
   if (isOnlineLocation(location)) return "";
   return `https://www.google.com/maps?q=${encodeURIComponent(
@@ -115,6 +118,7 @@ const getMapEmbedUrl = (location?: string | null) => {
   )}&output=embed`;
 };
 
+// Builds an external Google Maps link for the event location.
 const getMapLink = (location?: string | null) => {
   if (isOnlineLocation(location)) return "";
   return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
@@ -122,6 +126,7 @@ const getMapLink = (location?: string | null) => {
   )}`;
 };
 
+// Shows full event details and the correct join flow for solo or team events.
 export default function EventDetailsPage() {
   const params = useParams();
   const router = useRouter();
@@ -254,6 +259,7 @@ export default function EventDetailsPage() {
     ? new Date(registrationDeadline) < new Date()
     : false;
 
+  // Formats date for display.
   const formatDate = (value: string | null) => {
     if (!value) return "Date not set";
     const parsed = parseEventDateTime(value, null, "start");
@@ -266,11 +272,13 @@ export default function EventDetailsPage() {
     });
   };
 
+  // Formats date range for display.
   const formatDateRange = (start: string | null, end: string | null) => {
     if (!end || end === start) return formatDate(start);
     return `${formatDate(start)} - ${formatDate(end)}`;
   };
 
+  // Formats date time for display.
   const formatDateTime = (value: string | null) => {
     if (!value) return "No deadline";
     const parsed = new Date(value);
@@ -285,6 +293,7 @@ export default function EventDetailsPage() {
     });
   };
 
+  // Formats time for display.
   const formatTime = (value?: string | null) => {
     if (!value) return "";
     const [hours, minutes] = value.split(":");
@@ -302,6 +311,7 @@ export default function EventDetailsPage() {
       ? `${formatTime(event.start_time)} - ${formatTime(event.end_time)}`
       : formatTime(event?.start_time) || "Time not set";
 
+  // Gets status badge for this workflow.
   const getStatusBadge = (status: EventStatus) => {
     void status;
     return "border-sky-200 bg-sky-50 text-sky-700";
@@ -310,6 +320,7 @@ export default function EventDetailsPage() {
   const eventTypeBadgeClass =
     "rounded-full border border-[#c7d5fb] bg-[#eef3ff] px-3 py-1 text-xs font-semibold text-[#1e3a8a]";
 
+  // Loads details data from Supabase for this screen.
   const loadDetails = async () => {
     if (!id) return;
 
@@ -499,6 +510,7 @@ export default function EventDetailsPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id, router]);
 
+  // Defines the register for event helper used by this screen.
   const registerForEvent = async () => {
     if (!event || !profile) return false;
 
@@ -562,6 +574,7 @@ export default function EventDetailsPage() {
     return true;
   };
 
+  // Handles the join event action for this screen.
   const handleJoinEvent = async () => {
     setSaving(true);
     setError("");
@@ -635,6 +648,7 @@ export default function EventDetailsPage() {
     setPendingExternalJoin(pending);
   }, [event]);
 
+  // Confirms external registration and updates the registration state.
   const confirmExternalRegistration = async (completed: boolean) => {
     window.localStorage.removeItem(EXTERNAL_JOIN_STORAGE_KEY);
     setPendingExternalJoin(null);
@@ -647,6 +661,7 @@ export default function EventDetailsPage() {
   };
 
   useEffect(() => {
+    // Handles the return action for this screen.
     const handleReturn = () => {
       if (document.visibilityState === "visible") {
         void askAboutExternalRegistration();
@@ -662,6 +677,7 @@ export default function EventDetailsPage() {
     };
   }, [askAboutExternalRegistration]);
 
+  // Handles the external join event action for this screen.
   const handleExternalJoinEvent = () => {
     if (!event?.source_url) {
       setError("This event does not have an external registration link yet.");
@@ -682,6 +698,7 @@ export default function EventDetailsPage() {
     window.open(event.source_url, "_blank", "noopener,noreferrer");
   };
 
+  // Handles the leave event action for this screen.
   const handleLeaveEvent = async () => {
     if (!event || !profile) return;
 
@@ -718,6 +735,7 @@ export default function EventDetailsPage() {
     }
   };
 
+  // Handles the request join team action for this screen.
   const handleRequestJoinTeam = async (team: TeamWithMembers) => {
     if (!profile || !event) return;
 
@@ -762,6 +780,7 @@ export default function EventDetailsPage() {
     }
   };
 
+  // Handles the cancel join request action for this screen.
   const handleCancelJoinRequest = async (team: TeamWithMembers) => {
     if (!team.currentUserMemberId) return;
 
@@ -787,6 +806,7 @@ export default function EventDetailsPage() {
     }
   };
 
+  // Handles the create team action for this screen.
   const handleCreateTeam = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (!event || !profile) return;

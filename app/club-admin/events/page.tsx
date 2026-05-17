@@ -69,6 +69,7 @@ const inputCls =
 
 const MAX_EVENT_IMAGE_SIZE_BYTES = 3 * 1024 * 1024;
 
+// Converts an uploaded club event image into a data URL for preview and saving.
 const readImageFile = (file: File) =>
   new Promise<string>((resolve, reject) => {
     const reader = new FileReader();
@@ -77,6 +78,7 @@ const readImageFile = (file: File) =>
     reader.readAsDataURL(file);
   });
 
+// Converts database timestamps into datetime-local input values.
 function toDateTimeInput(value: string | null) {
   if (!value) return "";
   return value.slice(0, 16);
@@ -88,6 +90,7 @@ const fullEventSelect =
 const legacyEventSelect =
   "id, title, description, category, event_date, location, approval_status, created_at, is_club_members_only, club_id";
 
+// Detects schemas that are missing newer event columns so the UI can recover.
 function isMissingColumnError(error: { message?: string; code?: string } | null) {
   if (!error) return false;
   return (
@@ -97,6 +100,7 @@ function isMissingColumnError(error: { message?: string; code?: string } | null)
   );
 }
 
+// Provides the controlled category dropdown for club-admin event forms.
 function CategorySelect({
   value,
   onChange,
@@ -144,6 +148,7 @@ const statusStyles: Record<string, string> = {
   rejected: "bg-red-50 text-red-600 ring-red-200",
 };
 
+// Lets club admins create, edit, and review events owned by their club.
 export default function ClubAdminEventsPage() {
   const [managedClub, setManagedClub] = useState<ManagedClub | null>(null);
   const [events, setEvents] = useState<ClubEvent[]>([]);
@@ -157,6 +162,7 @@ export default function ClubAdminEventsPage() {
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
 
+  // Loads events data from Supabase for this screen.
   const loadEvents = async () => {
     setLoading(true);
     setError("");
@@ -210,6 +216,7 @@ export default function ClubAdminEventsPage() {
     setLoading(false);
   };
 
+  // Loads registrations data from Supabase for this screen.
   const loadRegistrations = async (clubEvents: ClubEvent[]) => {
     const eventIds = clubEvents.map((event) => event.id);
     if (eventIds.length === 0) {
@@ -286,6 +293,7 @@ export default function ClubAdminEventsPage() {
     return map;
   }, [registrations]);
 
+  // Handles the registration status action for this screen.
   const handleRegistrationStatus = async (
     registration: EventRegistration,
     status: "approved" | "rejected"
@@ -314,11 +322,13 @@ export default function ClubAdminEventsPage() {
     setRegistrationActionId(null);
   };
 
+  // Resets form back to its default state.
   const resetForm = () => {
     setForm(emptyForm);
     setEditingEvent(null);
   };
 
+  // Handles the image file action for this screen.
   const handleImageFile = async (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     event.target.value = "";
@@ -349,6 +359,7 @@ export default function ClubAdminEventsPage() {
     }
   };
 
+  // Starts editing for the selected record.
   const startEditing = (event: ClubEvent) => {
     setEditingEvent(event);
     setForm({
@@ -371,6 +382,7 @@ export default function ClubAdminEventsPage() {
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
+  // Handles the submit action for this screen.
   const handleSubmit = async () => {
     if (!managedClub) return;
     if (!form.title.trim()) {
@@ -503,6 +515,7 @@ export default function ClubAdminEventsPage() {
     setSaving(false);
   };
 
+  // Handles the delete action for this screen.
   const handleDelete = async (eventId: string) => {
     if (!managedClub) return;
 

@@ -50,6 +50,7 @@ type ClubMemberCountRow = {
   member_count: number;
 };
 
+// Detects older club membership tables that do not support approval status.
 function isMissingClubMemberStatus(error: { message?: string; code?: string } | null) {
   const message = (error?.message || "").toLowerCase();
   return (
@@ -74,9 +75,11 @@ const CLUB_FILTERS = [
   "Other",
 ] as const;
 
+// Reads the best display name for a club from either name or title fields.
 const getClubName = (club: ClubRow) =>
   club.name?.trim() || club.title?.trim() || "Untitled club";
 
+// Groups club categories into the public filter tabs.
 const getClubGroup = (club: Club) => {
   const text = [
     club.displayName,
@@ -123,6 +126,7 @@ const getClubGroup = (club: Club) => {
   return "Other";
 };
 
+// Formats club join dates for the joined-clubs sidebar.
 const formatDate = (value?: string | null) => {
   if (!value) return "Date not set";
   const datePart = value.split("T")[0];
@@ -138,6 +142,7 @@ const formatDate = (value?: string | null) => {
   });
 };
 
+// Shows public clubs, membership requests, and joined club summaries.
 export default function ClubsPage() {
   const router = useRouter();
 
@@ -153,6 +158,7 @@ export default function ClubsPage() {
   const [selectedCategory, setSelectedCategory] = useState("All Clubs");
 
   useEffect(() => {
+    // Loads clubs data from Supabase for this screen.
     const loadClubs = async () => {
       setLoading(true);
       setError("");
@@ -328,11 +334,13 @@ export default function ClubsPage() {
     [clubs, joinedClubIds]
   );
 
+  // Resets filters back to its default state.
   const resetFilters = () => {
     setSearch("");
     setSelectedCategory("All Clubs");
   };
 
+  // Updates club member count and refreshes the related UI state.
   const updateClubMemberCount = (clubId: string, change: number) => {
     setClubs((current) =>
       current.map((club) =>
@@ -343,6 +351,7 @@ export default function ClubsPage() {
     );
   };
 
+  // Defines the reload joined club ids helper used by this screen.
   const reloadJoinedClubIds = async (currentUserId: string) => {
     const { data, error: membershipsError } = await supabase
       .from("club_members")
@@ -390,6 +399,7 @@ export default function ClubsPage() {
     );
   };
 
+  // Handles the join club action for this screen.
   const handleJoinClub = async (clubId: string) => {
     if (!userId) return;
 
@@ -425,6 +435,7 @@ export default function ClubsPage() {
     setClubActionId("");
   };
 
+  // Handles the leave club action for this screen.
   const handleLeaveClub = async (clubId: string) => {
     if (!userId) return;
 

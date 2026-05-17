@@ -117,6 +117,7 @@ type PendingExternalJoin = {
 // result when they come back before marking the event as joined.
 const EXTERNAL_JOIN_STORAGE_KEY = "sharek:pendingExternalEventJoin";
 
+// Safely extracts the owning club name from Supabase relation data.
 const getClubName = (club: ClubRow) =>
   club.name?.trim() || club.title?.trim() || "University club";
 
@@ -125,6 +126,7 @@ type EventImageFields = Pick<
   "image_url" | "poster_url" | "banner_url" | "thumbnail_url"
 >;
 
+// Chooses the best available image URL for event cards.
 const getEventImageUrl = (event: EventImageFields) =>
   event.image_url?.trim() ||
   event.poster_url?.trim() ||
@@ -162,6 +164,7 @@ const DATE_RANGE_FILTERS = [
   "Past",
 ] as const;
 
+// Displays browsable events, filters, and join actions for students.
 export default function EventsPage() {
   const router = useRouter();
   const [events, setEvents] = useState<EventItem[]>([]);
@@ -254,6 +257,7 @@ export default function EventsPage() {
     }));
   }, []);
 
+  // Gets event type label for this workflow.
   const getEventTypeLabel = (event: Pick<EventItem, "is_team_based">) => {
     return event.is_team_based ? "Team based" : "Solo based";
   };
@@ -267,6 +271,7 @@ export default function EventsPage() {
   }, []);
 
   useEffect(() => {
+    // Loads events data from Supabase for this screen.
     const loadEvents = async () => {
       setLoading(true);
       setError("");
@@ -372,6 +377,7 @@ export default function EventsPage() {
     loadEvents();
   }, [attachResponsibleClubs]);
 
+  // Loads joined events data from Supabase for this screen.
   const loadJoinedEvents = async (loadedEvents: EventItem[]) => {
     const {
       data: { user },
@@ -524,6 +530,7 @@ export default function EventsPage() {
     setPendingExternalJoin(pending);
   }, []);
 
+  // Confirms external registration and updates the registration state.
   const confirmExternalRegistration = async (completed: boolean) => {
     const pending = pendingExternalJoin;
     window.localStorage.removeItem(EXTERNAL_JOIN_STORAGE_KEY);
@@ -539,6 +546,7 @@ export default function EventsPage() {
   };
 
   useEffect(() => {
+    // Handles the return action for this screen.
     const handleReturn = () => {
       if (document.visibilityState === "visible") {
         void askAboutExternalRegistration();
@@ -554,6 +562,7 @@ export default function EventsPage() {
     };
   }, [askAboutExternalRegistration]);
 
+  // Handles the external join action for this screen.
   const handleExternalJoin = (event: NormalizedEvent) => {
     if (!event.source_url) {
       setJoinMessage("This event does not have an external registration link yet.");
@@ -574,6 +583,7 @@ export default function EventsPage() {
     setJoinMessage("Register on the external site, then come back to Sharek.");
   };
 
+  // Opens event details for the selected record.
   const openEventDetails = (
     eventId: string,
     target: EventTarget | null
@@ -648,6 +658,7 @@ export default function EventsPage() {
     return "ongoing";
   }, [parseEventDateTime]);
 
+  // Formats date info for display.
   const formatDateInfo = (value: string | null) => {
     if (!value) {
       return {
@@ -687,7 +698,9 @@ export default function EventsPage() {
     return `${startInfo.displayDate} - ${endInfo.displayDate}`;
   }, []);
 
+  // Formats time label for display.
   const formatTimeLabel = (start: string | null, end: string | null) => {
+    // Formats one for display.
     const formatOne = (time: string) => {
       const [hours, minutes] = time.split(":");
       const d = new Date();
@@ -896,10 +909,13 @@ export default function EventsPage() {
   }> = [];
   const daysInCurrentMonth = 0;
   const monthLabel = "";
+  // Moves the UI to prev month.
   const goToPrevMonth = () => {};
+  // Moves the UI to next month.
   const goToNextMonth = () => {};
   const selectedEvents = filteredEvents;
 
+  // Gets status badge for this workflow.
   const getStatusBadge = (status: string) => {
     void status;
     return "border-sky-200 bg-sky-50 text-sky-700";
@@ -908,6 +924,7 @@ export default function EventsPage() {
   const eventTypeBadgeClass =
     "rounded-full border border-[#c7d5fb] bg-[#eef3ff] px-3 py-1 text-xs font-semibold text-[#1e3a8a]";
 
+  // Resets filters back to its default state.
   const resetFilters = () => {
     setSearchTerm("");
     setSelectedStatus("Still Available");

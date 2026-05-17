@@ -13,6 +13,7 @@ type UserMetadata = {
   major?: string;
 };
 
+// Lets new users enter their email verification code and activate their profile.
 export default function VerifyEmailPage() {
   const router = useRouter();
   const [email, setEmail] = useState("");
@@ -27,6 +28,7 @@ export default function VerifyEmailPage() {
     setEmail(params.get("email") ?? "");
   }, []);
 
+  // Creates or updates the profile record after Supabase confirms the email.
   const ensureProfile = async () => {
     const {
       data: { user },
@@ -78,6 +80,7 @@ export default function VerifyEmailPage() {
     }
   };
 
+  // Submits the verification code to Supabase and marks the portal profile verified.
   const handleVerify = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setError("");
@@ -121,6 +124,7 @@ export default function VerifyEmailPage() {
     }
   };
 
+  // Requests a new signup verification email when the account is not confirmed yet.
   const handleResend = async () => {
     const cleanEmail = email.trim().toLowerCase();
     if (!cleanEmail) {

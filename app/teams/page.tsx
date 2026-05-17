@@ -59,12 +59,15 @@ const TEAM_MEMBER_LIMIT = 6;
 const inputClass =
   "w-full rounded-lg border border-gray-300 px-4 py-3 text-sm text-gray-900 outline-none focus:border-[#1e3a8a] focus:ring-2 focus:ring-[#1e3a8a]/10";
 
+// Safely extracts a member profile from Supabase relation data.
 const getMemberProfile = (member: TeamMember) =>
   Array.isArray(member.profiles) ? member.profiles[0] : member.profiles;
 
+// Normalizes event titles so team availability checks can match events.
 const normalizeTitle = (value: string | null | undefined) =>
   (value || "").trim().toLowerCase();
 
+// Builds a real Date object from separate event date and time fields.
 const parseEventDateTime = (
   date: string | null | undefined,
   time: string | null | undefined,
@@ -101,6 +104,7 @@ const parseEventDateTime = (
   return Number.isNaN(parsed.getTime()) ? null : parsed;
 };
 
+// Checks whether an event registration deadline has already passed.
 const hasDeadlinePassed = (deadline: string | null | undefined) => {
   if (!deadline) return false;
 
@@ -114,6 +118,7 @@ const hasDeadlinePassed = (deadline: string | null | undefined) => {
   return !Number.isNaN(parsed.getTime()) && parsed < new Date();
 };
 
+// Explains why a team can no longer accept join requests for its event.
 const getEventUnavailableReason = (event: EventRow | null) => {
   if (!event) return "Linked event is not available.";
   if ((event.approval_status ?? "approved") !== "approved") {
@@ -144,6 +149,7 @@ const getEventUnavailableReason = (event: EventRow | null) => {
   return null;
 };
 
+// Lets students create teams, manage invitations, and request to join open teams.
 export default function TeamsPage() {
   const router = useRouter();
 
@@ -168,6 +174,7 @@ export default function TeamsPage() {
     >
   >({});
 
+  // Loads teams data from Supabase for this screen.
   const loadTeams = async () => {
     setLoading(true);
     setError("");
@@ -320,6 +327,7 @@ export default function TeamsPage() {
     });
   }, [teams, profile]);
 
+  // Closes team and reject waiting and applies any required cleanup.
   const closeTeamAndRejectWaiting = async (teamId: string) => {
     const { error: closeError } = await supabase
       .from("teams")
@@ -345,6 +353,7 @@ export default function TeamsPage() {
     return true;
   };
 
+  // Starts editing team for the selected record.
   const startEditingTeam = (team: TeamWithMembers) => {
     setEditingTeamId(team.id);
     setTeamEditValues((current) => ({
@@ -361,6 +370,7 @@ export default function TeamsPage() {
     setSuccess("");
   };
 
+  // Handles the save team action for this screen.
   const handleSaveTeam = async (team: TeamWithMembers) => {
     const values = teamEditValues[team.id];
     const approvedCount = team.members.filter(
@@ -423,6 +433,7 @@ export default function TeamsPage() {
     }
   };
 
+  // Ensures students can join event before continuing the workflow.
   const ensureStudentsCanJoinEvent = async (
     team: TeamWithMembers,
     students: Profile[]
@@ -450,6 +461,7 @@ export default function TeamsPage() {
     return false;
   };
 
+  // Handles the add members by id action for this screen.
   const handleAddMembersById = async (team: TeamWithMembers) => {
     if (!profile) return;
 
@@ -519,6 +531,7 @@ export default function TeamsPage() {
     }
   };
 
+  // Handles the member status action for this screen.
   const handleMemberStatus = async (
     team: TeamWithMembers,
     member: TeamMember,
@@ -569,6 +582,7 @@ export default function TeamsPage() {
     }
   };
 
+  // Handles the remove member action for this screen.
   const handleRemoveMember = async (member: TeamMember) => {
     if (member.user_id === profile?.id) {
       setError("You cannot remove yourself as the team owner.");
@@ -597,6 +611,7 @@ export default function TeamsPage() {
     }
   };
 
+  // Handles the request join action for this screen.
   const handleRequestJoin = async (team: TeamWithMembers) => {
     if (!profile) return;
 
@@ -634,6 +649,7 @@ export default function TeamsPage() {
     }
   };
 
+  // Handles the respond to invite action for this screen.
   const handleRespondToInvite = async (
     team: TeamWithMembers,
     status: "approved" | "rejected"
@@ -644,6 +660,7 @@ export default function TeamsPage() {
     await handleMemberStatus(team, membership, status);
   };
 
+  // Handles the cancel request action for this screen.
   const handleCancelRequest = async (team: TeamWithMembers) => {
     const membership = team.members.find((member) => member.user_id === profile?.id);
     if (!membership) return;
@@ -670,6 +687,7 @@ export default function TeamsPage() {
     }
   };
 
+  // Renders member card for this part of the UI.
   const renderMemberCard = (
     team: TeamWithMembers,
     member: TeamMember,
@@ -740,6 +758,7 @@ export default function TeamsPage() {
     );
   };
 
+  // Renders team card for this part of the UI.
   const renderTeamCard = (
     team: TeamWithMembers,
     mode: "owner" | "member" | "available"

@@ -66,6 +66,7 @@ type ClubMemberRow = {
   status?: "pending" | "approved" | "rejected" | null;
 };
 
+// Detects old schemas where club membership status is not available.
 function isMissingClubMemberStatus(error: { message?: string; code?: string } | null) {
   const message = (error?.message || "").toLowerCase();
   return (
@@ -75,9 +76,11 @@ function isMissingClubMemberStatus(error: { message?: string; code?: string } | 
   );
 }
 
+// Reads the best club display name from the available database fields.
 const getClubName = (club: ClubRow) =>
   club.name?.trim() || club.title?.trim() || "Untitled club";
 
+// Selects a usable image for club-owned event cards.
 const getEventImageUrl = (event: EventRow) =>
   event.image_url?.trim() ||
   event.poster_url?.trim() ||
@@ -85,6 +88,7 @@ const getEventImageUrl = (event: EventRow) =>
   event.thumbnail_url?.trim() ||
   null;
 
+// Formats event dates on the club details page.
 const formatDate = (value?: string | null) => {
   if (!value) return "Date not set";
   const datePart = value.split("T")[0];
@@ -100,6 +104,7 @@ const formatDate = (value?: string | null) => {
   });
 };
 
+// Formats event times on the club details page.
 const formatTime = (value?: string | null) => {
   if (!value) return "";
   const [hours, minutes] = value.split(":");
@@ -114,6 +119,7 @@ const formatTime = (value?: string | null) => {
   });
 };
 
+// Shows one club, its events, members, and the student's membership action.
 export default function ClubDetailsPage() {
   const params = useParams<{ id: string }>();
   const router = useRouter();
@@ -133,6 +139,7 @@ export default function ClubDetailsPage() {
   const [actionLoading, setActionLoading] = useState(false);
   const [clubMembershipsAvailable, setClubMembershipsAvailable] = useState(true);
 
+  // Defines the reload membership state helper used by this screen.
   const reloadMembershipState = async (currentUserId: string, currentClubId: string) => {
     const [membershipResult, memberCountsResult] = await Promise.all([
       supabase
@@ -190,6 +197,7 @@ export default function ClubDetailsPage() {
   };
 
   useEffect(() => {
+    // Loads club data from Supabase for this screen.
     const loadClub = async () => {
       setLoading(true);
       setError("");
@@ -321,6 +329,7 @@ export default function ClubDetailsPage() {
     loadClub();
   }, [clubId, router]);
 
+  // Handles the join club action for this screen.
   const handleJoinClub = async () => {
     if (!userId || !club) return;
 
@@ -352,6 +361,7 @@ export default function ClubDetailsPage() {
     setActionLoading(false);
   };
 
+  // Handles the leave club action for this screen.
   const handleLeaveClub = async () => {
     if (!userId || !club) return;
 

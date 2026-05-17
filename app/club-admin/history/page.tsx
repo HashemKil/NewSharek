@@ -49,11 +49,13 @@ const CATEGORY_COLORS: Record<string, string> = {
   Career:      "bg-pink-50 text-pink-700",
 };
 
+// Formats history dates for club-admin event timelines.
 function formatDate(d: string | null) {
   if (!d) return "—";
   return new Date(d).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
 }
 
+// Renders a colored status pill for one historical event state.
 function StatusBadge({ status }: { status: string }) {
   const s = STATUS_STYLES[status] ?? { badge: "bg-slate-100 text-slate-600 ring-slate-200", dot: "bg-slate-400" };
   return (
@@ -66,12 +68,14 @@ function StatusBadge({ status }: { status: string }) {
 
 // ─── Detail Modal ─────────────────────────────────────────────────────────────
 
+// Shows the full details for one club-owned historical event.
 function EventDetailModal({ event, onClose }: { event: ClubHistoryEvent; onClose: () => void }) {
   const [registrants, setRegistrants] = useState<Registrant[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
   useEffect(() => {
+    // Loads load data from Supabase for this screen.
     const load = async () => {
       setLoading(true);
       setError("");
@@ -200,6 +204,7 @@ function EventDetailModal({ event, onClose }: { event: ClubHistoryEvent; onClose
 
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
+// Lists finished and archived events owned by the current club admin.
 export default function ClubAdminHistoryPage() {
   const [events, setEvents] = useState<ClubHistoryEvent[]>([]);
   const [loading, setLoading] = useState(true);
@@ -210,6 +215,7 @@ export default function ClubAdminHistoryPage() {
   const [error, setError] = useState("");
 
   useEffect(() => {
+    // Loads load data from Supabase for this screen.
     const load = async () => {
       setLoading(true);
       setError("");

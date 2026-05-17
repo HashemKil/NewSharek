@@ -24,8 +24,10 @@ const inputCls =
 
 const MAX_IMAGE_SIZE_BYTES = 3 * 1024 * 1024;
 
+// Detects whether a carousel image came from a local upload.
 const isUploadedImage = (image: string) => image.startsWith("data:image/");
 
+// Converts an uploaded carousel image into a data URL.
 const readImageFile = (file: File) =>
   new Promise<string>((resolve, reject) => {
     const reader = new FileReader();
@@ -34,6 +36,7 @@ const readImageFile = (file: File) =>
     reader.readAsDataURL(file);
   });
 
+// Standardizes newsletter form labels.
 function Label({ children }: { children: React.ReactNode }) {
   return (
     <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-slate-400">
@@ -42,6 +45,7 @@ function Label({ children }: { children: React.ReactNode }) {
   );
 }
 
+// Shows success or error feedback while editing the carousel.
 function AlertBox({
   type,
   children,
@@ -60,6 +64,7 @@ function AlertBox({
   );
 }
 
+// Lets admins manage the homepage news carousel slides.
 export default function AdminNewsletterPage() {
   const [items, setItems] = useState<CarouselItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -73,6 +78,7 @@ export default function AdminNewsletterPage() {
 
   // ── Load ──────────────────────────────────────────────────────────────────
   useEffect(() => {
+    // Loads load data from Supabase for this screen.
     const load = async () => {
       setLoading(true);
       const { data, error: err } = await supabase
@@ -114,6 +120,7 @@ export default function AdminNewsletterPage() {
     persist(next);
   };
 
+  // Handles the move action for this screen.
   const handleMove = (idx: number, dir: -1 | 1) => {
     const next = [...items];
     const swap = idx + dir;
@@ -122,11 +129,13 @@ export default function AdminNewsletterPage() {
     persist(next);
   };
 
+  // Starts edit for the selected record.
   const startEdit = (idx: number) => {
     setEditIndex(idx);
     setEditForm({ ...items[idx] });
   };
 
+  // Handles the save edit action for this screen.
   const handleSaveEdit = () => {
     if (editIndex === null) return;
     const next = items.map((item, i) =>
@@ -135,6 +144,7 @@ export default function AdminNewsletterPage() {
     persist(next).then(() => setEditIndex(null));
   };
 
+  // Handles the add action for this screen.
   const handleAdd = () => {
     const next = [
       ...items,

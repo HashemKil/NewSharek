@@ -6,6 +6,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "../../lib/supabase";
 
+// Renders the account creation form and starts the email verification flow.
 export default function RegisterPage() {
   const router = useRouter();
   const [firstName, setFirstName] = useState("");
@@ -23,18 +24,23 @@ export default function RegisterPage() {
   const [success, setSuccess] = useState("");
   const [loading, setLoading] = useState(false);
 
+  // Confirms that registration uses a valid PSUT university email.
   const validatePSUTEmail = (value: string) => {
     const basicEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     return basicEmail.test(value) && value.toLowerCase().endsWith(".psut.edu.jo");
   };
 
+  // Ensures student IDs match the required 8-digit format.
   const validateStudentId = (value: string) => /^\d{8}$/.test(value);
+  // Checks that phone numbers stay within a realistic international length.
   const validatePhoneNumber = (value: string) => /^\+?\d{7,15}$/.test(value);
+  // Keeps phone input numeric while preserving an optional leading plus sign.
   const formatPhoneNumber = (value: string) => {
     const hasLeadingPlus = value.trimStart().startsWith("+");
     const digits = value.replace(/\D/g, "").slice(0, 15);
     return hasLeadingPlus ? `+${digits}` : digits;
   };
+  // Builds the callback URL Supabase uses after the user verifies their email.
   const getEmailRedirectUrl = () => `${window.location.origin}/auth/callback`;
   const normalizedPassword = password.toLowerCase();
   const emailUsername = email.trim().toLowerCase().split("@")[0] || "";

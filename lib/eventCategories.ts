@@ -20,6 +20,7 @@ const LEGACY_CATEGORY_MAP: Record<string, EventCategory> = {
   social: "Social",
 };
 
+// Maps saved or legacy category names into Sharek's final category list.
 export function normalizeEventCategory(category: string | null | undefined) {
   if (!category) return "";
 
@@ -29,6 +30,7 @@ export function normalizeEventCategory(category: string | null | undefined) {
   ) ?? LEGACY_CATEGORY_MAP[cleaned.toLowerCase()] ?? "Other";
 }
 
+// Guesses the best event category from the title and description when data is messy.
 export function inferEventCategory(
   category: string | null | undefined,
   title?: string | null,

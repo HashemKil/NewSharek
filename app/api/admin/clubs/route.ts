@@ -6,6 +6,7 @@ type ClubRow = {
   name: string | null;
 };
 
+// Returns club records for admin-only pages using the service role.
 export async function GET(request: Request) {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;

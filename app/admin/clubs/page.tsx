@@ -36,6 +36,7 @@ type Member = {
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
+// Formats club dates for admin detail views.
 function fmt(d: string | null) {
   if (!d) return "—";
   return new Date(d).toLocaleDateString("en-GB", {
@@ -51,6 +52,7 @@ const inputCls =
 const CLUB_CATEGORIES = ["Business", "Creative", "Tech", "Other"];
 const MAX_CLUB_IMAGE_SIZE_BYTES = 3 * 1024 * 1024;
 
+// Converts an uploaded club logo into a data URL for saving.
 const readImageFile = (file: File) =>
   new Promise<string>((resolve, reject) => {
     const reader = new FileReader();
@@ -61,6 +63,7 @@ const readImageFile = (file: File) =>
 
 // ─── Club Detail Modal ────────────────────────────────────────────────────────
 
+// Lets platform admins add a new club and optionally assign its admin.
 function CreateClubModal({
   onClose,
   onCreated,
@@ -75,6 +78,7 @@ function CreateClubModal({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
+  // Handles the image upload action for this screen.
   const handleImageUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     event.target.value = "";
@@ -99,6 +103,7 @@ function CreateClubModal({
     }
   };
 
+  // Handles the create action for this screen.
   const handleCreate = async () => {
     const trimmedName = name.trim();
     if (!trimmedName) {
@@ -268,6 +273,7 @@ function CreateClubModal({
   );
 }
 
+// Lets platform admins inspect, edit, delete, and manage one club.
 function ClubModal({
   club,
   onClose,
@@ -304,6 +310,7 @@ function ClubModal({
 
   // Load members
   useEffect(() => {
+    // Loads load data from Supabase for this screen.
     const load = async () => {
       setMembersLoading(true);
       setMembersErr("");
@@ -338,6 +345,7 @@ function ClubModal({
     load();
   }, [club.id]);
 
+  // Handles the save action for this screen.
   const handleSave = async () => {
     setSaving(true); setSaveErr(""); setSaveMsg("");
     const { error } = await supabase
@@ -358,6 +366,7 @@ function ClubModal({
     setSaving(false);
   };
 
+  // Handles the assign club admin action for this screen.
   const handleAssignClubAdmin = async () => {
     setAdminSaving(true);
     setSaveErr("");
@@ -422,6 +431,7 @@ function ClubModal({
     setAdminSaving(false);
   };
 
+  // Handles the remove member action for this screen.
   const handleRemoveMember = async (member: Member) => {
     const { error } = await supabase
       .from("club_members")
@@ -444,6 +454,7 @@ function ClubModal({
     }
   };
 
+  // Handles the toggle admin action for this screen.
   const handleToggleAdmin = async (member: Member) => {
     const isAssignedClubAdmin = club.club_admin_id === member.user_id;
     setSaveErr("");
@@ -515,6 +526,7 @@ function ClubModal({
     setTimeout(() => setSaveMsg(""), 3000);
   };
 
+  // Handles the delete club action for this screen.
   const handleDeleteClub = async () => {
     setDeleting(true);
     setSaveErr("");
@@ -867,6 +879,7 @@ function ClubModal({
 
 // ─── Club Card ────────────────────────────────────────────────────────────────
 
+// Displays one club card in the admin clubs grid.
 function ClubCard({ club, onClick }: { club: Club; onClick: () => void }) {
   const displayName = club.name?.trim() || "Unnamed Club";
   const image = club.logo_url || club.image_url || "";
@@ -919,6 +932,7 @@ function ClubCard({ club, onClick }: { club: Club; onClick: () => void }) {
 
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
+// Shows all clubs and the admin tools for creating or managing them.
 export default function AdminClubsPage() {
   const [clubs, setClubs] = useState<Club[]>([]);
   const [loading, setLoading] = useState(true);
@@ -928,6 +942,7 @@ export default function AdminClubsPage() {
   const [showCreateClub, setShowCreateClub] = useState(false);
 
   useEffect(() => {
+    // Loads load data from Supabase for this screen.
     const load = async () => {
       setLoading(true);
       setError("");

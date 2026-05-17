@@ -16,6 +16,7 @@ type ClubMember = {
   created_at: string | null;
 };
 
+// Lets a club admin approve, reject, and remove members for their club.
 export default function ClubAdminMembersPage() {
   const [managedClub, setManagedClub] = useState<ManagedClub | null>(null);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
@@ -26,6 +27,7 @@ export default function ClubAdminMembersPage() {
   const [success, setSuccess] = useState("");
 
   useEffect(() => {
+    // Loads members data from Supabase for this screen.
     const loadMembers = async () => {
       setLoading(true);
       setError("");
@@ -64,6 +66,7 @@ export default function ClubAdminMembersPage() {
     void Promise.resolve().then(loadMembers);
   }, []);
 
+  // Handles the remove member action for this screen.
   const handleRemoveMember = async (member: ClubMember) => {
     if (!managedClub) return;
 
@@ -88,6 +91,7 @@ export default function ClubAdminMembersPage() {
     setActionLoading(null);
   };
 
+  // Handles the member status action for this screen.
   const handleMemberStatus = async (
     member: ClubMember,
     status: "approved" | "rejected"

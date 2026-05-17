@@ -17,18 +17,22 @@ type ClubSummary = {
 
 export type ClubMembershipStatus = "pending" | "approved" | "rejected";
 
+// Builds the browser storage key for a user's joined club IDs.
 function getStorageKey(userId: string) {
   return `sharek.joinedClubs.${userId}`;
 }
 
+// Builds the browser storage key for cached joined club summary cards.
 function getSummaryStorageKey(userId: string) {
   return `sharek.joinedClubSummaries.${userId}`;
 }
 
+// Removes empty IDs and duplicates before saving membership state.
 function dedupeClubIds(clubIds: string[]) {
   return Array.from(new Set(clubIds.filter(Boolean)));
 }
 
+// Loads the profile fields needed to create a club membership request.
 async function loadMemberProfile(userId: string) {
   const { data, error } = await supabase
     .from("profiles")
@@ -47,6 +51,7 @@ async function loadMemberProfile(userId: string) {
   return data;
 }
 
+// Detects older database setups where the membership RPC is not installed yet.
 function isMissingRpc(error: { message?: string | null; code?: string | null }) {
   const message = (error.message || "").toLowerCase();
   return (
@@ -56,6 +61,7 @@ function isMissingRpc(error: { message?: string | null; code?: string | null }) 
   );
 }
 
+// Detects older club_members tables that do not have approval status yet.
 function isMissingStatusColumn(error: { message?: string | null; code?: string | null }) {
   const message = (error.message || "").toLowerCase();
   return (
@@ -65,6 +71,7 @@ function isMissingStatusColumn(error: { message?: string | null; code?: string |
   );
 }
 
+// Reads locally cached joined club IDs so the UI can stay responsive.
 export function getCachedJoinedClubIds(userId: string) {
   if (typeof window === "undefined") return [];
 
@@ -81,6 +88,7 @@ export function getCachedJoinedClubIds(userId: string) {
   }
 }
 
+// Stores the latest joined club ID list in localStorage.
 function setCachedJoinedClubIds(userId: string, clubIds: string[]) {
   if (typeof window === "undefined") return;
 
@@ -90,6 +98,7 @@ function setCachedJoinedClubIds(userId: string, clubIds: string[]) {
   );
 }
 
+// Reads cached club summaries for the memberships sidebar.
 export function getCachedJoinedClubs(userId: string) {
   if (typeof window === "undefined") return [];
 
@@ -111,6 +120,7 @@ export function getCachedJoinedClubs(userId: string) {
   }
 }
 
+// Stores unique club summaries for quick display after join actions.
 function setCachedJoinedClubs(userId: string, clubs: ClubSummary[]) {
   if (typeof window === "undefined") return;
 
@@ -128,10 +138,12 @@ function setCachedJoinedClubs(userId: string, clubs: ClubSummary[]) {
   );
 }
 
+// Adds one approved club membership to the local cache.
 export function cacheJoinedClub(userId: string, clubId: string) {
   setCachedJoinedClubIds(userId, [...getCachedJoinedClubIds(userId), clubId]);
 }
 
+// Adds one approved club summary to the local cache.
 export function cacheJoinedClubSummary(userId: string, club: ClubSummary) {
   if (!club?.id) return;
 
@@ -139,6 +151,7 @@ export function cacheJoinedClubSummary(userId: string, club: ClubSummary) {
   cacheJoinedClub(userId, club.id);
 }
 
+// Removes one club ID from the local membership cache.
 export function uncacheJoinedClub(userId: string, clubId: string) {
   setCachedJoinedClubIds(
     userId,
@@ -146,6 +159,7 @@ export function uncacheJoinedClub(userId: string, clubId: string) {
   );
 }
 
+// Removes one club summary and its ID after leaving a club.
 export function uncacheJoinedClubSummary(userId: string, clubId: string) {
   setCachedJoinedClubs(
     userId,
@@ -154,6 +168,7 @@ export function uncacheJoinedClubSummary(userId: string, clubId: string) {
   uncacheJoinedClub(userId, clubId);
 }
 
+// Combines database memberships with cached IDs while keeping the list unique.
 export function mergeJoinedClubIds(userId: string, serverClubIds: string[]) {
   const merged = dedupeClubIds([
     ...serverClubIds,
@@ -164,6 +179,7 @@ export function mergeJoinedClubIds(userId: string, serverClubIds: string[]) {
   return merged;
 }
 
+// Combines database club summaries with cached summaries for the current user.
 export async function mergeJoinedClubs(
   userId: string,
   serverClubs: ClubSummary[]
@@ -200,6 +216,7 @@ export async function mergeJoinedClubs(
   return mergedClubs;
 }
 
+// Creates a pending or approved club membership depending on the database setup.
 export async function joinClubMembership(clubId: string, userId: string) {
   const { data: existing, error: existingError } = await supabase
     .from("club_members")
@@ -279,6 +296,7 @@ export async function joinClubMembership(clubId: string, userId: string) {
   return "pending" as const;
 }
 
+// Removes the current user's membership from a club and updates local cache.
 export async function leaveClubMembership(clubId: string, userId: string) {
   const rpcResult = await supabase.rpc("leave_club", {
     target_club_id: clubId,
